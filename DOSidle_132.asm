@@ -1,19 +1,6 @@
 
 PAGE  59,132
 
-;ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ
-;ÛÛ					                                 ÛÛ
-;ÛÛ				DOSIDLE1                                 ÛÛ
-;ÛÛ					                                 ÛÛ
-;ÛÛ      Created:   11-Jul-100		                                 ÛÛ
-;ÛÛ      Passes:    9          Analysis	Options on: none                 ÛÛ
-;ÛÛ					                                 ÛÛ
-;ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ
-
-target		EQU   'M6'                      ; Target assembler: MASM-6.0
-
-include  srmacros.inc
-
 .586p
 
 PSP_envirn_seg	equ	2Ch
@@ -22,10 +9,6 @@ PSP_envirn_seg	equ	2Ch
 
 seg_a		segment	byte public use16 'code'
 		assume cs:seg_a  , ds:seg_a , ss:stack_seg_b
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 mem_lallocate	proc near			               
 	push	bx
@@ -78,14 +61,14 @@ mem_lallocate_all	proc	near
 mem_lallocate_all	endp
 
 intr_vec_struc	struc 
-	number  db  0                                                              	
- 	old_isr dd  0                                                              	             
- 	new_isr dd  0                                                              	            
+	number  db  ?                                                              	
+ 	old_isr dd  ?                                                              	             
+ 	new_isr dd  ?                                                              	            
 intr_vec_struc	ends                                                                               	
 
 intr_suspend_struc	struc
-	byte1	db 0
-	bytes25	dd 0	
+	byte1	db ?
+	bytes25	dd ?	
 intr_suspend_struc	ends
 
 par_item	struc
@@ -116,9 +99,9 @@ ACTION_REACTIVATE	= 3
 
 isr_2dh	proc	far
 	cmp	dx, tsr_kernel_id	;		db	 2Eh, 3Bh, 16h, 31h, 00h, 74h 
-	jz	loc_1                   ;		db	 05h                          
+	jz	short loc_1                   ;		db	 05h                          
 loc_2:
-	jmp	dword ptr cs:old_int_2dh
+	jmp	dword ptr old_int_2dh
 loc_1:			                        
 	cmp	bx,ACTION_TEST
 	jne	short loc_3		; Jump if not equal
@@ -127,7 +110,7 @@ loc_1:
 	iret				; Interrupt return
 loc_3:
 	cmp	bx,ACTION_UNINSTALL
-	jne	short loc_10		; Jump if not equal
+	jne	loc_10		; Jump if not equal
 	cli				; Disable interrupts
 	push	cx
 	push	si
@@ -171,7 +154,7 @@ locloop_6:
 	loop	locloop_6		; Loop if cx > 0
 
 loc_7:
-	mov	eax,dword ptr old_int_2dh
+	mov	eax,old_int_2dh
 	mov	es:INTR_2DH_BIOS,eax
 	mov	ax,tsr_psp_seg
 	call	mem_lrelease
@@ -288,15 +271,11 @@ loc_19:
 	iret				; Interrupt return
 isr_2dh	endp
 
-hex_table2	db	'0123456789ABCDEF'	; Data table (indexed access)
+hex_table	db	'0123456789ABCDEF'	; Data table (indexed access)
 
 VIDEO_SEG	= 0B800h
 video_offset	dw	0
 video_attribute	db	0Eh
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 video_writestring	proc	near
 	push	ax
@@ -328,10 +307,6 @@ video_set_nl	proc	near
 	retn
 video_set_nl	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 video_writech	proc	near
 	push	ax
 	push	di
@@ -345,11 +320,6 @@ video_writech	proc	near
 	pop	ax
 	retn
 video_writech	endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 video_writedec	proc	near
 	push	eax
@@ -371,7 +341,7 @@ loc_22:
 
 locloop_23:
 	pop	bx
-	mov	al,byte ptr hex_table2[bx]	; ('0123456789ABCDEF')
+	mov	al,hex_table[bx]	; ('0123456789ABCDEF')
 	call	video_writech
 	loop	locloop_23		; Loop if cx > 0
 
@@ -409,7 +379,7 @@ locloop_25:
 	rol	ebx,4			; Rotate
 	mov	si,bx
 	and	si,0Fh
-	mov	al,byte ptr hex_table2[si]	; ('0123456789ABCDEF')
+	mov	al,hex_table[si]	; ('0123456789ABCDEF')
 	call	video_writech
 	loop	locloop_25		; Loop if cx > 0
 
@@ -453,29 +423,15 @@ locloop_28:
 	retn
 video_attribute_special	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 video_get_attribute	proc	near
 	mov	al,video_attribute
 	retn
 video_get_attribute	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 video_set_attribute	proc	near
 	mov	video_attribute,al
 	retn
 video_set_attribute	endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 video_get_pos	proc	near
 	push	dx
@@ -488,17 +444,12 @@ video_get_pos	proc	near
 	retn
 video_get_pos	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-video_set_pos		proc	near
+video_set_pos	proc	near
 	push	ax
 	push	dx
 	mov	dh,ah
 	mov	dl,0A0h
-		mul	dl			; ax = reg * al
+	mul	dl			; ax = reg * al
 	shr	dx,7			; Shift w/zeros fill
 	and	dl,0FEh
 	add	ax,dx
@@ -506,13 +457,12 @@ video_set_pos		proc	near
 	pop	dx
 	pop	ax
 	retn
-video_set_pos		endp
+video_set_pos	endp
 
 IDLE_MODE_1	=	1      	;enable TESTOMODE
 IDLE_MODE_2	=	2     	;disable FORCEMODE
 idle_mode	db	0
 
-		db	 87h,0DBh
 old_intr_21h		dd	0
 new_intr_21h_1		dd	isr_21h_1
 new_intr_21h_2		dd	isr_21h_2
@@ -522,51 +472,36 @@ intr_21h_calls		dd	00000h
 intr_21h_halts_msg	db	' int 21h HLTs executed.', 0
 intr_21h_calls_msg	db	' int 21h calls.', 0
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 isr_21h_halt_1	proc	near
-	test	cs:idle_mode,IDLE_MODE_2
+	test	idle_mode,IDLE_MODE_2
 	jnz	short loc_ret_29	; Jump if not zero
-	inc	cs:intr_21h_delay
-	cmp	cs:intr_21h_delay,0Ah
+	inc	intr_21h_delay
+	cmp	intr_21h_delay,0Ah
 	jb	short loc_ret_29	; Jump if below
 	sti				; Enable interrupts
 	hlt				; Halt processor
-	inc	cs:intr_21h_halts
+	inc	intr_21h_halts
 
 loc_ret_29:
 	retn
 isr_21h_halt_1	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-isr_21h_halt_2		proc	near
+isr_21h_halt_2	proc	near
 	push	ax
 	sti				; Enable interrupts
 loc_30:
 	mov	ah,0Bh
 	pushf				; Push flags
-	call	dword ptr cs:old_intr_21h
+	call	dword ptr old_intr_21h
 	test	ax,ax
 	jnz	short loc_31		; Jump if not zero
 	hlt				; Halt processor
-	inc	cs:intr_21h_halts
+	inc	intr_21h_halts
 	jmp	short loc_30
 loc_31:
 	pop	ax
 	retn
-isr_21h_halt_2		endp
-
-			                        
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	nop
+isr_21h_halt_2	endp
 
 isr_21h_1	proc	far
 	cmp	ah,2Ch			; ','
@@ -585,16 +520,11 @@ loc_33:
 	call	isr_21h_halt_2
 	jmp	short loc_35
 loc_34:
-	mov	dword ptr cs:intr_21h_delay,0
+	mov	dword ptr intr_21h_delay,0
 	mov	dword ptr cs:intr_16h_delay,0
 loc_35:
-	jmp	dword ptr cs:old_intr_21h
+	jmp	dword ptr old_intr_21h
 isr_21h_1	endp			                        
-
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	nop
 
 isr_21h_2	proc	far	
 	push	eax
@@ -614,7 +544,7 @@ isr_21h_2	proc	far
 	call	video_set_attribute
 	mov	si,offset intr_21h_calls_msg	; (' int 21h calls.')
 	call	video_writestring
-	mov	eax,dword ptr [esp+4]
+	mov	eax,[esp+4]
 	cmp	ah,2Ch			; ','
 	ja	short loc_38		; Jump if above
 	jnz	short loc_36		; Jump if not zero
@@ -657,10 +587,9 @@ loc_39:
 	pop	ds
 	pop	si
 	pop	eax
-	jmp	dword ptr cs:old_intr_21h
+	jmp	dword ptr old_intr_21h
 isr_21h_2	endp
 
-		db	 87h,0DBh
 old_intr_16h		dd	0
 new_intr_16h_1		dd	isr_16h_1
 new_intr_16h_2		dd	isr_16h_2
@@ -670,30 +599,21 @@ intr_16h_calls		dd	00000h
 intr_16h_halts_msg	db	' int 16h HLTs executed.', 0
 intr_16h_calls_msg	db	' int 16h calls.', 0
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-isr_16h_halt_1		proc	near
-	test	cs:idle_mode,IDLE_MODE_2
+isr_16h_halt_1	proc	near
+	test	idle_mode,IDLE_MODE_2
 	jnz	short loc_ret_40	; Jump if not zero
-	inc	cs:intr_16h_delay
-	cmp	cs:intr_16h_delay,0Ah
+	inc	intr_16h_delay
+	cmp	intr_16h_delay,0Ah
 	jb	short loc_ret_40	; Jump if below
 	sti				; Enable interrupts
 	hlt				; Halt processor
-	inc	cs:intr_16h_halts
+	inc	intr_16h_halts
 
 loc_ret_40:
 	retn
-isr_16h_halt_1		endp
+isr_16h_halt_1	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-isr_16h_halt_2		proc	near
+isr_16h_halt_2	proc	near
 	push	ax
 	push	cx
 	inc	ah
@@ -701,25 +621,17 @@ isr_16h_halt_2		proc	near
 	sti				; Enable interrupts
 loc_41:
 	pushf				; Push flags
-	call	dword ptr cs:old_intr_16h
+	call	dword ptr old_intr_16h
 	jnz	short loc_42		; Jump if not zero
 	hlt				; Halt processor
-	inc	cs:intr_16h_halts
+	inc	intr_16h_halts
 	mov	ah,ch
 	jmp	short loc_41
 loc_42:
 	pop	cx
 	pop	ax
 	retn
-isr_16h_halt_2		endp
-
-			                        
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	nop
+isr_16h_halt_2	endp
 
 isr_16h_1	proc	far
 	cmp	ah,12h
@@ -743,20 +655,12 @@ loc_45:
 	call	isr_16h_halt_2
 	jmp	short loc_47
 loc_46:
-	mov	cs:intr_16h_delay,0
-	mov	cs:intr_21h_delay,0
+	mov	dword ptr intr_16h_delay,0
+	mov	dword ptr intr_21h_delay,0
 loc_47:
-	jmp	dword ptr cs:old_intr_16h
+	jmp	dword ptr old_intr_16h
 isr_16h_1	endp
 			                        
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-
 isr_16h_2	proc	far
 	push	eax
 	push	si
@@ -775,7 +679,7 @@ isr_16h_2	proc	far
 	call	video_set_attribute
 	mov	si,offset intr_16h_calls_msg	; (' int 16h calls.')
 	call	video_writestring
-	mov	eax,dword ptr [esp+4]
+	mov	eax,[esp+4]
 	cmp	ah,12h
 	ja	short loc_51		; Jump if above
 	jz	short loc_48		; Jump if zero
@@ -814,63 +718,51 @@ loc_50:
 	call	video_set_attribute
 	mov	si,offset intr_16h_halts_msg	; (' int 16h HLTs executed.')
 	call	video_writestring
-	mov	eax,dword ptr [esp+4]
+	mov	eax,[esp+4]
 	call	isr_16h_halt_2
 	jmp	short loc_52
 loc_51:
-	mov	intr_16h_delay,0
-	mov	intr_21h_delay,0
+	mov	dword ptr intr_16h_delay,0
+	mov	dword ptr intr_21h_delay,0
 loc_52:
 	pop	ds
 	pop	si
 	pop	eax
-	jmp	dword ptr cs:old_intr_16h
+	jmp	dword ptr old_intr_16h
 isr_16h_2	endp
 
-		db	90h
-old_intr_14h	dd	0
-new_intr_14h_1	dd	isr_14h_1
-new_intr_14h_2	dd	isr_14h_2
-		db	0, 0
-		db	0, 0                                                 	
+old_intr_14h		dd	?
+new_intr_14h_1		dd	isr_14h_1
+new_intr_14h_2		dd	isr_14h_2
 intr_14h_calls		dd	00000h                                          
 intr_14h_halts		dd	00000h                                          
 intr_14h_halts_msg	db	' int 14h HALTs executed.', 0
 intr_14h_calls_msg	db	' int 14h calls.', 0
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-isr_14h_halt_1		proc	near
+isr_14h_halt_1	proc	near
 	push	ax
 	sti				; Enable interrupts
 loc_53:
 	mov	ah,3
 	pushf				; Push flags
-	call	dword ptr cs:old_intr_14h
+	call	dword ptr old_intr_14h
 	test	ah,1
 	jnz	short loc_54		; Jump if not zero
 	hlt				; Halt processor
-	inc	cs:intr_14h_calls
+	inc	intr_14h_calls
 	jmp	short loc_53
 loc_54:
 	pop	ax
 	retn
-isr_14h_halt_1		endp
-
-	nop
+isr_14h_halt_1	endp
 
 isr_14h_1	proc	far
 	cmp	ah,2
 	jne	short loc_55		; Jump if not equal
 	call	isr_14h_halt_1
 loc_55:
-	jmp	dword ptr cs:old_intr_14h
+	jmp	dword ptr old_intr_14h
 isr_14h_1	endp
-
-	xchg	bx,bx
-	nop
 
 isr_14h_2	proc	far
 	push	eax
@@ -890,7 +782,7 @@ isr_14h_2	proc	far
 	call	video_set_attribute
 	mov	si,offset intr_14h_calls_msg	; (' int 14h calls.')
 	call	video_writestring
-	mov	eax,dword ptr [esp+4]
+	mov	eax,[esp+4]
 	cmp	ah,2
 	jne	short loc_56		; Jump if not equal
 	mov	ax,2
@@ -908,10 +800,9 @@ loc_56:
 	pop	ds
 	pop	si
 	pop	eax
-	jmp	dword ptr cs:old_intr_14h
+	jmp	dword ptr old_intr_14h
 isr_14h_2	endp
 
-		db	90h
 old_irq_01h		dd	00000h  		
 new_irq_01h_1		dd	isr_01h_1		
 new_irq_01h_2		dd	isr_01h_2		
@@ -921,17 +812,12 @@ irq_01h_calls_msg	db	' IRQ 01h calls.', 0
 isr_01h_1	proc	far
 	mov	dword ptr intr_16h_delay,0
 	mov	dword ptr intr_21h_delay,0             	
-	jmp	dword ptr cs:old_irq_01h
+	jmp	dword ptr old_irq_01h
 isr_01h_1	endp
-
-	xchg	bx,bx
-	xchg	bx,bx
-	xchg	bx,bx
-	nop
 
 isr_01h_2	proc	far
 	pushf
-	call 	dword ptr cs:old_irq_01h
+	call 	dword ptr old_irq_01h
 	push	eax
 	push	si
 	push	ds
@@ -957,12 +843,7 @@ isr_01h_2	proc	far
 	iret
 isr_01h_2	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-tsr_instcheck		proc	near
+tsr_instcheck	proc	near
 	push	bx
 	xor	bx,bx			; Zero register
 	int	2Dh			; ??INT Non-standard interrupt
@@ -971,20 +852,15 @@ tsr_instcheck		proc	near
 	mov	ah,0
 	pop	bx
 	retn
-tsr_instcheck		endp
+tsr_instcheck	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-tsr_uninstall		proc	near
+tsr_uninstall	proc	near
 	push	bx
 	mov	bx,ACTION_UNINSTALL
 	int	2Dh			; ??INT Non-standard interrupt
 	pop	bx
 	retn
-tsr_uninstall		endp
+tsr_uninstall	endp
 
 tsr_suspend	proc	near                       
 	push	bx
@@ -1002,11 +878,8 @@ tsr_reactivate	proc	near
 	retn
 tsr_reactivate 	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
-tsr_hookint		proc	near
+tsr_hookint	proc	near
 	pushf				; Push flags
 	pushad				; Save all regs
 	push	es
@@ -1029,15 +902,9 @@ tsr_hookint		proc	near
 	popad				; Restore all regs
 	popf				; Pop flags
 	retn
-tsr_hookint		endp
+tsr_hookint	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-
-tsr_install		proc	near
+tsr_install	proc	near
 	cli				; Disable interrupts
 	mov	tsr_kernel_id,dx
 	mov	tsr_psp_seg,bx
@@ -1045,7 +912,7 @@ tsr_install		proc	near
 	xor	ax,ax			; Zero register
 	mov	es,ax
 	mov	eax,es:INTR_2DH_BIOS
-	mov	dword ptr old_int_2dh,eax
+	mov	old_int_2dh,eax
 	mov	eax,new_int_2dh
 	mov	es:INTR_2DH_BIOS,eax
 	mov	ax,tsr_env_seg
@@ -1070,11 +937,6 @@ SYS_RAW         = 01h                   ;
 SYS_VCPI        = 02h                   ; Flags for PM hosts driving the
 SYS_DPMI        = 04h                   ; system.
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 tolower		proc	near
 	cmp	al,41h			; 'A'
 	jb	short loc_ret_57	; Jump if below
@@ -1086,11 +948,6 @@ loc_ret_57:
 	retn
 tolower		endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 toupper		proc	near
 	cmp	al,61h			; 'a'
 	jb	short loc_ret_58	; Jump if below
@@ -1101,11 +958,6 @@ toupper		proc	near
 loc_ret_58:
 	retn
 toupper		endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 islower		proc	near
 	cmp	al,61h			; 'a'
@@ -1143,10 +995,6 @@ tolower_test	proc	near
 	retn
 tolower_test	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 isdigit		proc	near
 	push	ax
 	cmp	al,30h			; '0'
@@ -1180,10 +1028,6 @@ loc_67:
 	pop	ax
 	retn
 ishex		endp
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 iswhitespace	proc	near
 	cmp	al,20h			; ' '
@@ -1352,11 +1196,7 @@ locloop_78:
 	retn
 strcpy		endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-local_switch		proc	near
+local_switch	proc	near
 	jmp	short loc_79
 w1	dw	0
 w2	dw	0
@@ -1429,12 +1269,7 @@ loc_89:
 	pop	si
 	pop	dx
 	retn
-local_switch		endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+local_switch	endp
 
 get_switch	proc	near
 	push	ax
@@ -1490,10 +1325,6 @@ loc_91:
 	retn
 get_switch_4	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 compare_switch		proc	near
 	push	ax
 	push	bx
@@ -1523,14 +1354,10 @@ loc_94:
 	pop	bx
 	pop	ax
 	retn
-compare_switch		endp
+compare_switch	endp
 
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-parse_cmdln		proc	near
+parse_cmdln	proc	near
 	pusha				; Save all regs
 	call	get_switch
 	jc	short loc_99		; Jump if carry Set
@@ -1565,7 +1392,7 @@ loc_99:
 loc_100:
 	popa				; Restore all regs
 	retn
-parse_cmdln		endp
+parse_cmdln	endp
 
 open_file	proc	near			                        
 	push	ax
@@ -1634,10 +1461,6 @@ read_file	proc	near
 	retn
 read_file	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 write_file	proc	near
 	push	ax
 	push	bx
@@ -1673,11 +1496,7 @@ locloop_101:
 	retn
 local_readstr	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-local_writestr		proc	near
+local_writestr	proc	near
 	push	ax
 	push	cx
 	push	si
@@ -1701,7 +1520,7 @@ local_writestr	endp
 local_readln	proc	near			                        
 	push	ax
 	push	cx
-	push	si      	
+	push	si      	
 	mov	cx,0FFh
 
 locloop_104:
@@ -1720,11 +1539,7 @@ loc_105:
 	retn
 local_readln	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-local_writeln		proc	near
+local_writeln	proc	near
 	push	ax
 	call	local_writestr
 	mov	al,0Dh
@@ -1733,12 +1548,7 @@ local_writeln		proc	near
 	call	local_writech
 	pop	ax
 	retn
-local_writeln		endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+local_writeln	endp
 
 local_readch	proc	near
 	push	bx
@@ -1763,12 +1573,7 @@ local_readch	proc	near
 	retn
 local_readch	endp
 
-                                	
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-local_writech		proc	near
+local_writech	proc	near
 	push	bx
 	push	cx
 	push	dx
@@ -1789,16 +1594,9 @@ local_writech		proc	near
 	pop	cx
 	pop	bx
 	retn
-local_writech		endp
+local_writech	endp
 
-hex_table	db	'0123456789ABCDEF'	; Data table (indexed access)
-		db	0C3h
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-local_writedec		proc	near
+local_writedec	proc	near
 	push	eax
 	push	ebx
 	push	cx
@@ -1819,7 +1617,7 @@ loc_106:
 
 locloop_107:
 	pop	bx
-	mov	al,byte ptr cs:hex_table[bx]	; ('0123456789ABCDEF')
+	mov	al,hex_table[bx]	; ('0123456789ABCDEF')
 	call	local_writech
 	loop	locloop_107		; Loop if cx > 0
 
@@ -1829,15 +1627,9 @@ locloop_107:
 	pop	ebx
 	pop	eax
 	retn
-local_writedec		endp
+local_writedec	endp
 
-		db	0C3h
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-local_writehex		proc	near
+local_writehex	proc	near
 	push	ax
 	push	ebx
 	push	cx
@@ -1853,7 +1645,7 @@ locloop_108:
 	rol	ebx,4			; Rotate
 	mov	si,bx
 	and	si,0Fh
-	mov	al,byte ptr cs:hex_table[si]	; ('0123456789ABCDEF')
+	mov	al,hex_table[si]	; ('0123456789ABCDEF')
 	call	local_writech
 	loop	locloop_108		; Loop if cx > 0
 
@@ -1862,7 +1654,7 @@ locloop_108:
 	pop	ebx
 	pop	ax
 	retn
-local_writehex		endp
+local_writehex	endp
 
 test_writefile	proc	near
 	push	dx
@@ -1872,30 +1664,21 @@ test_writefile	proc	near
 	retn
 test_writefile	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-com_writef		proc	near
+com_writef	proc	near
 	push	dx
 	mov	dx,1
 	call	local_writestr
 	pop	dx
 	retn
-com_writef		endp
+com_writef	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-com_writeln		proc	near
+com_writeln	proc	near
 	push	dx
 	mov	dx,1
 	call	local_writeln
 	pop	dx
 	retn
-com_writeln		endp
+com_writeln	endp
 
 com_writech	proc	near		                        
 	push	dx
@@ -1929,10 +1712,6 @@ init_video	proc	near
 	retn
 init_video	endp
 		                                                                              
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß                   
-;                              SUBROUTINE                                                     
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 get_video_state	proc	near
 	push	bx
 	mov	ah,0Fh
@@ -1943,11 +1722,6 @@ get_video_state	proc	near
 	retn
 get_video_state	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 set_video_state	proc	near
 	xor	ah,ah			; Zero register
 	int	10h			; Video display   ah=functn 00h
@@ -1956,11 +1730,7 @@ set_video_state	proc	near
 set_video_state	endp
 
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-video_get_page		proc	near
+video_get_page	proc	near
 	push	bx
 	mov	ah,0Fh
 	int	10h			; Video display   ah=functn 0Fh
@@ -1969,9 +1739,9 @@ video_get_page		proc	near
 	mov	al,bh
 	pop	bx
 	retn
-video_get_page		endp
+video_get_page	endp
 
-video_set_page		proc	near			                        
+video_set_page	proc	near			                        
 	mov	ah,5
 	int	10h			; Video display   ah=functn 05h
 					;  set display page al
@@ -2006,11 +1776,7 @@ video_set_cursor_pos	proc	near
 	retn
 video_set_cursor_pos	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-test_cpu		proc	near
+test_cpu	proc	near
 	pushf				; Push flags
 	push	bx
 	push	cx
@@ -2074,7 +1840,7 @@ loc_109:
 	pop	bx
 	popf				; Pop flags
 	retn
-test_cpu		endp
+test_cpu	endp
 
 test_fpu	proc	near
 	jmp	short loc_fpu 
@@ -2127,13 +1893,9 @@ test_himem	proc	near
 	retn
 test_himem	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 EMS_BIOS	= 019Ch ;67h * 4	;INTR 67H LIM EMS
 
-test_vcpi		proc	near
+test_vcpi	proc	near
 	push	ax
 	push	bx
 	push	es
@@ -2151,14 +1913,9 @@ loc_111:
 	pop	bx
 	pop	ax
 	retn
-test_vcpi		endp
+test_vcpi	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-test_dpmi		proc	near
+test_dpmi	proc	near
 	pusha				; Save all regs
 	push	es
 	mov	ax,1687h
@@ -2170,26 +1927,16 @@ loc_112:
 	pop	es
 	popa				; Restore all regs
 	retn
-test_dpmi		endp
+test_dpmi	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-test_v86		proc	near
+test_v86	proc	near
 	push	ax
 	smsw	ax			; Store machine stat
 	and	al,1
 	cmp	al,1
 	pop	ax
 	retn
-test_v86		endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+test_v86	endp
 
 irq_getpic	proc	near
 	mov	bx,7008h
@@ -2375,14 +2122,12 @@ locloop_118:
 	retn
 zero64bytes	endp
 
-	xchg	bx,bx
-	nop	
-
 v86_callback	dd	0
 
 win386_v86_callback_init	proc	near
 	pushad				; Save all regs
-	push	ds es
+	push	ds 
+	push	es
 	mov	ax,1605h
 	xor	bx,bx			; Zero register
 	mov	es,bx
@@ -2394,13 +2139,13 @@ win386_v86_callback_init	proc	near
 	int	2Fh			; Windows init broadcast
 	test	cx,cx
 	jnz	short loc_119a		; Jump if not zero
-	mov	word ptr cs:v86_callback,si
-	mov	word ptr cs:v86_callback+2,ds
-	cmp	dword ptr cs:v86_callback,0
+	mov	word ptr v86_callback,si
+	mov	word ptr v86_callback+2,ds
+	cmp	v86_callback,0
 	je	short loc_119a		; Jump if equal
 	cli				; Disable interrupts
 	xor	ax,ax			; Zero register
-	call	dword ptr cs:v86_callback
+	call	dword ptr v86_callback
 	jc	short loc_119a		; Jump if carry Set
 	clc				; Clear carry flag
 	jmp	short loc_119b
@@ -2410,32 +2155,30 @@ loc_119a:
 	int	2Fh			; Windows exit broadcast
 	stc				; Set carry flag
 loc_119b:
-	pop	es ds
+	pop	es 
+	pop	ds
 	popad				; Restore all regs
 	retn
 win386_v86_callback_init	endp
 
 win386_v86_callback_exit	proc	near
 	pushad				; Save all regs
-	push	ds es
-	cmp	dword ptr cs:v86_callback,0
+	push	ds 
+	push	es
+	cmp	v86_callback,0
 	je	short loc_119e		; Jump if equal
 	cli				; Disable interrupts
 	mov	ax,1
-	call	dword ptr cs:v86_callback
+	call	dword ptr v86_callback
 	mov	ax,1606h
 	xor	dx,dx			; Zero register
 	int	2Fh			; Windows exit broadcast
 loc_119e:
-	pop	es ds
+	pop	es 
+	pop	ds
 	popad				; Restore all regs
 	retn
 win386_v86_callback_exit	endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 
 vcpi_getpic	proc	near
 	push	bx
@@ -2448,11 +2191,7 @@ vcpi_getpic	proc	near
 	retn
 vcpi_getpic	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-vcpi_get_intr		proc	near
+vcpi_get_intr	proc	near
 	push	ax
 	push	cx
 	mov	ax,0DE0Ah
@@ -2463,7 +2202,7 @@ vcpi_get_intr		proc	near
 	pop	cx
 	pop	ax
 	retn
-vcpi_get_intr		endp
+vcpi_get_intr	endp
 
 vcpi_set_intr	proc	near                        
 	pushf				; Push flags
@@ -2482,10 +2221,6 @@ vcpi_set_intr	proc	near
 	retn
 vcpi_set_intr	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 clear_if_zero	proc	near
 	test	ah,ah
 	clc				; Clear carry flag
@@ -2498,13 +2233,14 @@ clear_if_zero	endp
 
 psp_seg		dw	0			; segment storage
 env_seg		dw	0
-sys_type		db	1
+sys_type	db	1
 par_table	par_item <"/H", par_help>                         		
 		par_item <"/?", par_help>                         
 		par_item <"/U", par_uninst>                       
        		par_item <"/TM", par_testmode>                          
       		par_item <"/NF", par_forcemode>                        
-	       	par_item <0>            		; Marks end of par_table. ar_table.
+;	       	par_item <0>            		; Marks end of par_table. ar_table.
+ 		db size par_item dup(0)
 
 msg_proginfo	db	'CPUIdle for DOS V1.32 [Beta]', 0Dh, 0Ah
 		db	'Copyright (C) by Marton Balog, 1998.', 0Dh, 0Ah, 0
@@ -2542,10 +2278,6 @@ loc_121:
 					;  terminate with al=return code
 	retn
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 init		proc	near
 	cli				; Disable interrupts
 	mov	ax,cs
@@ -2564,12 +2296,6 @@ init		proc	near
 	sti				; Enable interrupts
 	retn
 init		endp
-
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 
 par_help	proc	near
 	mov	si,offset msg_progsyntax; ('Syntax:    DOSIDLE [Opti')
@@ -2614,10 +2340,6 @@ par_forcemode	proc	near
 	retn
 par_forcemode	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 read_cmdln	proc	near
 	mov	di,80h			;PSP:80h => commandline
 	mov	es,psp_seg
@@ -2628,11 +2350,7 @@ read_cmdln	proc	near
 	retn
 read_cmdln	endp
 
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-check_system		proc	near
+check_system	proc	near
 	call	test_vcpi
 	jnz	short loc_122		; Jump if not zero
 	mov	si,offset warn_VCPI	; ('WARNING: VCPI host detec')
@@ -2653,14 +2371,9 @@ loc_123:
 
 loc_ret_124:
 	retn
-check_system		endp
+check_system	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
-hook_ints		proc	near
+hook_ints	proc	near
 	mov	eax,gs:INTR_14H_BIOS
 	mov	old_intr_14h,eax
 	mov	eax,gs:INTR_16H_BIOS
@@ -2694,11 +2407,6 @@ loc_ret_126:
 	retn
 hook_ints	endp
 
-
-;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-;                              SUBROUTINE
-;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
-
 hook_irqs	proc	near
 	cli				; Disable interrupts
 	cmp	sys_type,SYS_VCPI
@@ -2715,7 +2423,7 @@ loc_128:
 loc_129:
 	movzx	ebx,bl			; Mov w/zero extend
 	inc	ebx
-	mov	eax,dword ptr gs:[ebx*4]
+	mov	eax,gs:[ebx*4]
 	mov	old_irq_01h,eax
 	test	idle_mode,IDLE_MODE_1
 	jnz	short loc_130		; Jump if not zero
@@ -2729,14 +2437,6 @@ loc_131:
 	sti				; Enable interrupts
 	retn
 hook_irqs	endp
-
-
-;ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ
-;
-;                       Program	Entry Point
-;
-;ÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛÛ
-
 
 main	proc	far
 	call	init
@@ -2756,22 +2456,14 @@ main	proc	far
 	mov	bx,psp_seg
 	mov	ax,env_seg
 	call	tsr_install			; Sub does not return here
-	db	15 dup (0)
-
 main	endp
 
 seg_a	ends
 
-
-
 ;------------------------------------------------------  stack_seg_b   ----
 
 stack_seg_b	segment	word stack 'STACK' use16
-
-		db	800 dup (0)
-
+		db	800 dup (?)
 stack_seg_b	ends
-
-
 
 		end	main
