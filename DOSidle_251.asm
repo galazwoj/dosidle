@@ -28,23 +28,242 @@ ideal                                   ; Yep, this prog is TASM 4.0 coded!
 SEGMENT	CODE16	PARA PUBLIC 'CODE'
 ENDS
 
-SEGMENT	DATA16	DWORD PUBLIC 'DATA'
+SEGMENT	STACK16	PARA STACK 'STACK'
 ENDS
 
-SEGMENT	MYSTACK	PARA STACK 'STACK'
-ENDS
+SEGMENT	CODE16	PARA PUBLIC 'CODE'
+	ASSUME CS: CODE16, DS:CODE16, ES:CODE16, SS:STACK16
 
-GROUP	DGROUP	DATA16, MYSTACK
-ENDS
+PROC	mem_lallocate			                        
+	push	bx
+	mov	bx,cx
+	mov	ah,48h
+	int	21h			; DOS Services  ah=function 48h
+					;  allocate memory, bx=bytes/16
+	pop	bx
+	retn
+ENDP
 
+PROC	mem_lrelease
+	push	ax es
+	mov	es,ax
+	mov	ah,49h
+	int	21h			; DOS Services  ah=function 49h
+					;  release memory block, es=seg
+	pop	es ax
+	retn
+ENDP
 
-include "_stddata.ah"
-include "_tsrres.ah"
-include "_dcon.ah"
+PROC	mem_lresize
+	push	ax bx es
+	mov	es,ax
+	mov	bx,cx
+	mov	ah,4Ah
+	int	21h			; DOS Services  ah=function 4Ah
+					;  change memory allocation
+					;   bx=bytes/16, es=mem segment
+	pop	es bx ax
+	retn
+ENDP
 
+PROC	mem_lallocate_all			 
+	push	bx
+	mov	bx,0FFFFh
+	mov	ah,48h
+	int	21h			; DOS Services  ah=function 48h
+					;  allocate memory, bx=bytes/16
+	mov	ax,bx
+	mov	cx,bx
+	pop	bx
+	retn
+ENDP
+
+ 	ALIGN	16
+
+struc	rmdw
+	ofss	dw ?
+	segm	dw ?
+ends
+
+struc 	intr_vec_struc                                                             	
+	number  db  0                                                              	
+ 	old_isr dd  0                                                              	             
+ 	new_isr dd  0                                                              	            
+ends                                                                               	
+
+struc	intr_suspend_struc
+	byte1	db 0
+	bytes25	dd 0	
+ends
+
+INT2DH_BIOS	= 2dh * 4
+
+tsr_kernel_id	dw	0					;data_11	stores KERNEL_ID
+tsr_psp_seg	dw	0					;data_12     	stores psp_seg
+tsr_env_seg	dw	0					;data_13   	stores env seg 
+new_int_2dh	dd	isr_2dh					;data_14
+old_int_2dh     rmdw <0, 0>					;data_15
+intr_vectors	db	30 dup intr_vec_struc (<>)		;data_16
+vectors_hooked	dw	0					;data_17
+suspnd_vectors	db	30 dup intr_suspend_struc (<>)		;data_18
+vectors_suspend	dw	0					;data_19	
+
+TSR_ID			= 0FEADh
+ACTION_TEST		= 0
+ACTION_UNINSTALL       	= 1
+ACTION_SUSPEND         	= 2
+ACTION_REACTIVATE	= 3
+	
+PROC	isr_2dh
+	cmp	dx, [tsr_kernel_id]
+	jz	loc_1
+loc_2:
+	jmp	[dword cs:old_int_2dh]
+loc_1:			                        ;* No entry point to code
+	cmp	bx, ACTION_TEST
+	jne	short loc_3		; Jump if not equal
+	mov	ax, TSR_ID
+	sti				; Enable interrupts
+	iret				; Interrupt return
+loc_3:
+	cmp	bx, ACTION_UNINSTALL
+	jne	short loc_10		; Jump if not equal
+	cli				; Disable interrupts
+	push	cx si di ds es
+	mov	ax,cs
+	mov	ds,ax
+	xor	ax,ax			; Zero register
+	mov	es,ax
+	mov	eax, [new_int_2dh]
+	cmp	es:INT2DH_BIOS,eax
+	jne	short loc_8		; Jump if not equal
+	mov	si,offset intr_vectors
+	mov	cx, [vectors_hooked]
+	test	cx,cx
+	jz	short loc_7		; Jump if zero
+
+locloop_4:
+	movzx	di, [(intr_vec_struc si).number]	; Mov w/zero extend
+	shl	di,2			; Shift w/zeros fill
+	mov	eax,[(intr_vec_struc si).old_isr]
+	cmp	[es:di],eax
+	je	short loc_5		; Jump if equal
+	mov	eax,[(intr_vec_struc si).new_isr]
+	cmp	es:[di],eax
+	jne	short loc_8		; Jump if not equal
+loc_5:
+	add	si,size intr_vec_struc
+	loop	locloop_4		; Loop if cx > 0
+
+	mov	si,offset intr_vectors
+	mov	cx,vectors_hooked
+
+locloop_6:
+	mov	eax,[(intr_vec_struc si).old_isr]
+	movzx	di,[(intr_vec_struc si).number]	; Mov w/zero extend
+	shl	di,2			; Shift w/zeros fill
+	mov	es:[di],eax
+	add	si,size intr_vec_struc
+	loop	locloop_6		; Loop if cx > 0
+
+loc_7:
+	mov	eax, [dword ptr old_int_2dh]
+	mov	es:INT2DH_BIOS,eax
+	mov	ax, [tsr_psp_seg]		;xxx perhaps error, should be mov bx, [tsr_bx]
+	call	mem_lrelease
+	mov	ax,1
+	jmp	short loc_9
+loc_8:
+	xor	ax,ax			; Zero register
+loc_9:
+	pop	es ds di si cx
+	sti				; Enable interrupts
+	iret				; Interrupt return
+
+loc_10:
+	cmp	bx, ACTION_SUSPEND
+	jne	short loc_15		; Jump if not equal
+	cli				; Disable interrupts
+	push	ebx cx si di ds es
+	mov	ax,cs
+	mov	ds,ax
+	cmp	[vectors_suspend],0
+	jne	short loc_13		; Jump if not equal
+	mov	si,offset intr_vectors
+	mov	di,offset suspnd_vectors
+	mov	cx,[vectors_hooked]
+	mov	[vectors_suspend],cx
+	test	cx,cx
+	jz	short loc_12		; Jump if zero
+
+locloop_11:
+	mov	ebx,[(intr_vec_struc si).new_isr]
+	ror	ebx,10h			; Rotate
+	mov	es,bx			;save isr seg
+	rol	ebx,10h			; Rotate
+	mov	al,[es:bx]         	;copy first byte of new isr
+	mov	[(intr_suspend_struc di).byte1],al
+	mov	eax,[es:bx+1] 		;copy bytes 2-5 of new isr
+	mov	[(intr_suspend_struc di).bytes25],eax
+	mov	eax,[(intr_vec_struc si).old_isr]
+	mov	byte ptr es:[bx],0EAh  	;patch isr with JMP FAR
+	mov	[es:bx+1],eax       	;patch isr with jmp far old_intr_XX
+	add	si, size intr_vec_struc
+	add	di,size intr_suspend_struc
+	loop	locloop_11		; Loop if cx > 0
+
+loc_12:
+	mov	ax,1
+	jmp	short loc_14
+loc_13:
+	xor	ax,ax			; Zero register
+loc_14:
+	pop	es ds di si cx ebx
+	sti				; Enable interrupts
+	iret				; Interrupt return
+
+loc_15:
+	cmp	bx, ACTION_REACTIVATE
+	jne	loc_2			; Jump if not equal
+	cli				; Disable interrupts
+	push	ebx cx si di ds es
+	mov	ax,cs
+	mov	ds,ax
+	cmp	[vectors_suspnd],0
+	je	short loc_18		; Jump if equal
+	mov	si,offset intr_vectors
+	mov	di,offset suspnd_vectors
+	mov	cx,[vectors_hooked]
+	mov	[vectors_suspnd],0
+	test	cx,cx
+	jz	short loc_17		; Jump if zero
+
+locloop_16:
+	mov	ebx,[intr_vec_struc si).new_isr]
+	ror	ebx,10h			; Rotate
+	mov	es,bx
+	rol	ebx,10h			; Rotate
+	mov	al,[(intr_suspend_struc di).byte1]
+	mov	[es:bx],al		;restore first byte of isr
+	mov	eax,[(intr_suspend_struc di).bytes25]
+	mov	es:[bx+1],eax         	;restore bytes 2-5 of isr
+	add	si,size intr_vec_struc
+	add	di,size intr_suspend_struc
+	loop	locloop_16		; Loop if cx > 0
+
+loc_17:
+	mov	ax,1
+	jmp	short loc_19
+loc_18:
+	xor	ax,ax			; Zero register
+loc_19:
+	pop	es ds di si cx ebx
+	sti				; Enable interrupts
+	iret				; Interrupt return
+ENDP
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
+        ALIGN	16
 
 Struc 	qk_item
         prog    db 12 dup (0), 0        ; Name of the child process.
@@ -84,11 +303,8 @@ INT_XXH_FORCE   = 300                   ; # of calls to FN before forced HLT.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
-;DATASEG	;RESIDENTDATA 
-SEGMENT	DATA16
 Align 4
-int_xxh_fcount  dw 0                    ;  # int xxh FN(x) called repeatedly.
+int_xxh_fcount  dd 0                    ;  # int xxh FN(x) called repeatedly.
 
 mode_flags      db MODE_SFORCE          ; Config flags for program startup.
 irq_flags       db 0                    ; IRQ flags for kernel.
@@ -102,15 +318,9 @@ quirk_table     qk_item <"NC.EXE", 1, 0>
 exec_calls      dw 200                  ; Count of DOS FN 4bh calls.
 child_name      db 13 dup (0)           ; Name of the child to be executed.
 
-ENDS
-
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
-;	assume ds:DATA 
+	ALIGN	16
 
 Proc    _str_cmp                        ; NOTE: Copied from _string.h!!
         push ax cx si di
@@ -201,10 +411,6 @@ Proc    int_xxh_skip                    ; Skip ALL FORCE counter updates.
         ret
 Endp
 
-ENDS
-
-
-
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 21H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
@@ -214,9 +420,6 @@ INT_21H_TOPFN   = 4ch                   ; Highest FN that is handled.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
-;DATASEG ;RESIDENTDATA 
-SEGMENT	DATA16
 Align 4
 old_int_21h     rmdw <0, 0>
 
@@ -239,15 +442,8 @@ int_21h_fntable dw int_xxh_zerocount    ; FN 00h: Terminate.
                 dw int_21h_fn4bh        ; FN 4bh: Execute child process.
                 dw int_21h_fn4ch        ; FN 4ch: Terminate child process.
 
-ENDS
-
-
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_21h_fn06h                   ; DOS FN: Console I/O.
         cmp dl,0ffh                     ; "Keypressed?" function requested?
         jne short @@done                ; No.
@@ -285,7 +481,7 @@ Proc    int_21h_fn4bh                   ; DOS FN: Execute child process.
 @@read: mov al,[es:di]                  ; Get char of child name in int 21h.
         mov [ds:si + bx],al             ; Save it to our buffer.
 
-        cmp al,':'                      ; Was it a DRIVE specifier?
+        	cmp al,':'                      ; Was it a DRIVE specifier?
         je short @@kill                 ; Yes.
 
         cmp al,'\'                      ; Was it a PATH separator?
@@ -411,7 +607,7 @@ Proc    int_21h_normalhlt
 
 @@apml: mov ax,5305h                    ;
         pushf                           ;
-        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
 
         mov ah,0bh                      ; Int 21h FN: "Keypressed?"
         pushf                           ;
@@ -449,8 +645,6 @@ Proc    int_21h_handler                 ; DOS functions handler.
         jmp [dword cs:old_int_21h]      ; Chain to old interrupt handler.
 Endp
 
-ENDS
-
 
 
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
@@ -463,8 +657,6 @@ INT_16H_TOPFN   = 12h                   ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;DATASEG ;RESIDENTDATA
-SEGMENT	DATA16
 Align 4
 old_int_16h     rmdw <0, 0>
 
@@ -476,15 +668,10 @@ int_16h_fntable dw int_16h_normalhlt    ; FN 00h: Keyboard input.
                 dw int_xxh_forcehlt     ; FN 11h: "Keypressed?" (101-keys).
                 dw int_xxh_forcehlt     ; FN 12h: "SHIFT Keypressed?" (101).
 
-ENDS
-
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_16h_normalhlt
         push bx                         ; Safety only - BX already saved in the main Int-16 handler
 
@@ -510,7 +697,7 @@ Proc    int_16h_normalhlt
 
         mov ax,5305h                    ;
         pushf                           ;
-        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
 
         mov ah,bh                       ; Restore saved AH (FN number).
         jmp @@apml                      ; No, continue HLTing.
@@ -546,8 +733,6 @@ Proc    int_16h_handler                 ; BIOS keyboard functions handler.
         jmp [dword cs:old_int_16h]      ; Chain to old interrupt handler.
 Endp
 
-ENDS
-
 
 
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
@@ -560,20 +745,13 @@ INT_2FH_TOPFN   = 0ffffh                ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;DATASEG ;RESIDENTDATA
-SEGMENT	DATA16
 Align 4
 old_int_2fh     rmdw <0, 0>
 
-ENDS
 
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Align 16
 Proc    int_2fh_handler
         push ax dx ds                   ; (AX might be clobbered in int_xxh_forcehlt)
@@ -601,28 +779,18 @@ Proc    int_2fh_handler
         jmp [dword cs:old_int_2fh]      ; Chain to old interrupt handler.
 Endp
 
-ENDS
-
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
-;DATASEG ;RESIDENTDATA
-SEGMENT	DATA16
 Align 4
 old_int_33h         rmdw <0, 0>
 user_mouse_handler  rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
 user_mouse_mask     dw 0
 dummy_handler_ptr   rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
 
-ENDS
-
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Align 16
 Proc    int_33h_handler
         sti                                ; (let 'em run!)
@@ -743,7 +911,6 @@ Endp
         ; ret
 ; endp
 
-ENDS
 
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 14H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
@@ -755,8 +922,6 @@ INT_14H_TOPFN   = 03h                   ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;DATASEG	;RESIDENTDATA
-SEGMENT	DATA16
 Align 4
 old_int_14h     rmdw <0, 0>
 
@@ -765,15 +930,11 @@ int_14h_fntable dw int_xxh_zerocount    ; FN 00h: Init COM port.
                 dw int_14h_normalhlt    ; FN 02h: Read char from COM port.
                 dw int_xxh_forcehlt     ; FN 03h: "Char ready?"
 
-ENDS
 
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_14h_normalhlt
 	sti                             ; Enable IRQs for following HLT.
 
@@ -791,7 +952,7 @@ Proc    int_14h_normalhlt
 
 @@apml: mov ax,5305h                    ;
         pushf                           ;
-        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
 
         mov ah,03h                      ; Int 14h FN: Get serial port status.
         pushf                           ;
@@ -829,7 +990,6 @@ Proc    int_14h_handler                 ; BIOS serial I/O handler.
         jmp [dword cs:old_int_14h]      ; Chain to old interrupt handler.
 Endp
 
-ENDS
 
 
 
@@ -837,21 +997,15 @@ ENDS
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 1xH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-;DATASEG	;RESIDENTDATA
-SEGMENT	DATA16
 Align 4
 old_int_10h     rmdw <0, 0>             ;
 old_int_15h     rmdw <0, 0>             ; Original vector values.
 
-ENDS
 
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_10h_handler                 ; BIOS video functions handler.
         mov [cs:int_xxh_fcount],0       ; Zero int xxh force counter.
         jmp [dword cs:old_int_10h]      ; Chain to old interrupt handler.
@@ -870,16 +1024,12 @@ Proc    int_15h_handler                 ; BIOS AT Services handler.
 @@old:  jmp [dword cs:old_int_15h]      ; Chain to old interrupt handler.
 Endp
 
-ENDS
-
 
 
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°°±±±±±±±±±±±±±±± IRQ HANDLERS ±±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-;DATASEG	;RESIDENTDATA
-SEGMENT	DATA16
 Align 4
 old_masterirqs  rmdw 8 dup (<0, 0>)     ; Original handlers of the hooked IRQs.
 
@@ -888,15 +1038,11 @@ new_masterirqs  rmdw <OFFSET irq_00_handler, SEG irq_00_handler>, <OFFSET irq_01
                 rmdw <OFFSET irq_04_handler, SEG irq_04_handler>, <OFFSET irq_05_handler, SEG irq_05_handler>
                 rmdw <OFFSET irq_06_handler, SEG irq_06_handler>, <OFFSET irq_07_handler, SEG irq_07_handler>
 
-ENDS
 
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;CODESEG ;RESIDENTCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Align 16
 Proc    irq_00_handler                  ; Handler for IRQ 0 (timer).
         or [cs:irq_flags],IRQ_00        ; Mark that IRQ 0 occurred.
@@ -981,11 +1127,92 @@ Proc    irq_07_handler                  ; Handler for IRQ 7.
         jmp [dword cs:old_masterirqs + 28] ; Chain to old interrupt handler.
 Endp
 
-RESIDENT_END:
+PROC	TSR_INSTCHECK
+	push	bx
+	xor	bx,bx			; Zero register
+	int	2Dh			; ??INT Non-standard interrupt
+	cmp	ax, TSR_ID
+	sete	al			; Set byte if equal
+	mov	ah,0
+	pop	bx
+	retn
+ENDP
 
+PROC	TSR_UNINSTALL
+	push	bx
+	mov	bx, ACTION_UNINSTALL
+	int	2Dh			; ??INT Non-standard interrupt
+	pop	bx
+	retn
+ENDP
+
+PROC	TSR_SUSPEND
+	push	bx
+	mov	bx, ACTION_SUSPEND
+	int	2Dh			; ??INT Non-standard interrupt
+	pop	bx
+	retn
+ENDP
+
+PROC	TSR_REACTIVATE
+	push	bx
+	mov	bx, ACTION_REACTIVATE
+	int	2Dh			; ??INT Non-standard interrupt
+	pop	bx
+	retn
+ENDP
+
+PROC	TSR_HOOKINT
+	pushf				; Push flags
+	pushad				; Save all regs
+	push	es
+	cli				; Disable interrupts
+	xor	esi,esi			; Zero register                                                 
+	mov	es,si                                                   	
+	mov	ecx, size intr_vec_struc                 			
+	mov	si, [numx`_of_vectors_hooked]		        		
+	inc	[num_of_vectors_hooked]         
+	imul	esi,ecx			           	  			
+	add	si,offset intr_vectors	        
+	mov	[(intr_vec_struc si).number],bl                  		
+	mov	[(intr_vec_struc si).new_isr],eax                		
+	xor	bh,bh			           	
+	shl	bx,2			           	
+	xchg	es:[bx],eax                        
+	mov	[(intr_vec_struc si).old_isr],eax  
+	sti				; Enable interrupts
+	pop	es
+	popad				; Restore all regs
+	popf				; Pop flags
+	retn
+ENDP
+
+PROC	tsr_install
+	;       mov cx,OFFSET RESIDENT_END             ;
+	;	mov dx,KERNEL_ID                ;
+	;	mov bx,[psp_seg]                ;
+	;	mov ax,[env_seg]                ;
+	;	call tsr_install                ; Make kernel TSR.
+	cli					; Disable interrupts
+	mov	[tsr_kernel_id],dx
+	mov	[tsr_psp_seg],bx
+	mov	[tsr_env_seg],ax
+	xor	ax,ax				; Zero register
+	mov	es,ax                   	
+	mov	eax,es:int2dh_bios		;get original isr 2dh
+	mov	[dword old_int_2dh],eax		;store away
+	mov	eax,new_int_2dh			;new isr 2dh
+	mov	es:int2dh_bios,eax		;set in ivt
+	mov	ax,tsr_ax
+	call	mwm_lrelease
+	mov	dx,cx
+	sub	dx,bx
+	mov	ax,3100h
+	int	21h				; DOS Services  ah=function 31h
+ENDP
+
+;RESIDENT_END:
 ENDS
-
-
 
 ;ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»;
 ;º ²²²²²²²²²²²²²²²²²²²² INITIALIZATION PART OF PROGRAM ²²²²²²²²²²²²²²²²²²²² º;
@@ -1027,9 +1254,15 @@ ENDS
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
+SEGMENT	CODE16	PARA PUBLIC 'CODE'
+	ASSUME CS: CODE16, DS:CODE16, ES:CODE16, SS:STACK16
 
-;DATASEG	;INITIALIZATIONDATA
-SEGMENT	DATA16
+macro	exit	exit_code
+	mov	al, exit_code
+	mov	ah, 4ch
+	int	21h
+endm
+
 psp_seg         dw 0
 env_seg         dw 0
                      
@@ -1048,10 +1281,7 @@ sys_type        db SYS_RAW              ; Type of system (Raw, VCPI, DPMI).
 MACRO	par_item param,proc_offset:=<0>
 	DB	&param
 	psize	SIZESTR <param>
-	psize = 13 - psize
-	rept	psize
-	db	0
-	endm
+	db	13 - psize dup (0)
 	dw 	proc_offset
 ENDM
 
@@ -1131,15 +1361,11 @@ err_dos_vers    db "[#32]: MS-DOS 5.00 or later is required.",0
 err_cmdln       db "[#40]: Invalid command-line switch.",0
 err_v86         db "[#50]: CPU in V86 mode and no VCPI or DPMI host present.",0
 
-ENDS
 
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-;CODESEG	;INITIALIZATIONCODE
-SEGMENT	CODE16
-ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    error_exit                      ; Exits with error message.
 	push si
 	lea si,[err_str]                ;
@@ -1683,6 +1909,7 @@ Proc    detect_pm
 Endp
 
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
+resident_end:
 
 Proc    detect_mouse
         push es
@@ -1778,5 +2005,319 @@ Proc    main
 Endp
 
 ENDS
-End     main
 
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+SEGMENT	CODEI	PARA PUBLIC 'CODE'
+	ASSUME CS: CODEI, DS:CODEI, ES:CODEI, SS:STACK16
+
+PROC	strcpy
+		push	ax cx si di
+		mov	cx,0FFh
+
+locloop_106:
+		mov	al,[si]
+		mov	es:[di],al
+		inc	si
+		inc	di
+		test	al,al
+		loopnz	locloop_106		; Loop if zf=0, cx>0
+
+		pop	di si cx ax
+		retn
+ENDP
+		db	14 dup (0)
+
+PROC	LOCAL_WRITESTR
+		push	ax cx si
+		mov	cx,0FFh
+
+locloop_107:
+		mov	al,[si]
+		cmp	al,0
+		je	short loc_108		; Jump if equal
+		call	LOCAL_WRITECH
+		inc	si
+		loop	locloop_107		; Loop if cx > 0
+
+loc_108:
+		pop	si cx ax
+		retn
+ENDP
+
+PROC	LOCAL_WRITELN
+		push	ax
+		call	LOCAL_WRITESTR
+		mov	al,CR
+		call	LOCAL_WRITECH
+		mov	al,LF
+		call	LOCAL_WRITECH
+		pop	ax
+		retn
+ENDP
+
+PROC	LOCAL_WRITECH         			;write character
+		push	bx cx dx ds ax
+		mov	bx,dx
+		mov	cx,1
+		mov	ax,ss
+		mov	ds,ax
+		mov	dx,sp
+		mov	ah,40h
+		int	21h			; DOS Services  ah=function 40h
+						;  write file  bx=file handle
+						;   cx=bytes from ds:dx buffer
+		pop	ax ds dx cx bx
+		retn
+ENDP
+hex_table	db	'0123456789ABCDEF'
+
+PROC	LOCAL_WRITEDEC
+		push	eax ebx cx edx si
+		mov	ebx, 10
+		mov	si,dx
+		xor	cx,cx			; Zero register
+loc_109:
+		xor	edx,edx			; Zero register
+		div	ebx			; ax,dx rem=dx:ax/reg
+		push	dx
+		inc	cl
+		test	eax,eax
+		jnz	loc_109			; Jump if not zero
+		mov	dx,si
+
+locloop_110:
+		pop	bx
+		mov	al,byte ptr cs:[hex_table][bx]
+		call	LOCAL_WRITECH
+		loop	locloop_110		; Loop if cx > 0
+
+		pop	si edx cx ebx eax
+		retn
+ENDP
+
+PROC	CON_WRITEF
+		push	dx
+		mov	dx,1
+		call	LOCAL_WRITESTR
+		pop	dx
+		retn
+ENDP
+
+PROC	CON_WRITELN
+		push	dx
+		mov	dx,1
+		call	LOCAL_WRITELN
+		pop	dx
+		retn
+ENDP
+
+PROC	CON_WRITECH
+		push	dx
+		mov	dx,1
+		call	LOCAL_WRITECH
+		pop	dx
+		retn
+ENDP
+
+PROC	CON_WRITEDEC
+		push	dx
+		mov	dx,1
+		call	LOCAL_WRITEDEC
+		pop	dx
+		retn
+ENDP
+		db	0, 0, 0, 0, 0, 0
+
+PROC	TOLOWER
+		cmp	al,41h			; 'A'
+		jb	short loc_ret_111	; Jump if below
+		cmp	al,5Ah			; 'Z'
+		ja	short loc_ret_111	; Jump if above
+		add	al,20h			; ' '
+
+loc_ret_111:
+		retn
+ENDP
+
+PROC	isspace
+		cmp	al,20h			; ' '
+		je	short loc_ret_112	; Jump if equal
+		cmp	al,9
+		je	short loc_ret_112	; Jump if equal
+
+loc_ret_112:
+		retn
+ENDP
+
+PROC	LOCAL_SWITCH
+		jmp	short loc_113
+		w1	dw	0
+		w2	dw 	0
+loc_113:
+		push	dx
+		push	si
+		push	di
+		mov	word ptr ds:[w1],0
+		mov	word ptr ds:[w2],0
+		mov	dh,al
+		xor	ah,ah			; Zero register
+		xor	bl,bl			; Zero register
+		mov	dl,1
+		movzx	cx,byte ptr es:[di]	; Mov w/zero extend
+		jcxz	short loc_122		; Jump if cx=0
+
+locloop_114:
+		inc	di
+		mov	al,es:[di]
+		call	isspace
+		jz	short loc_115		; Jump if zero
+		cmp	al,2Dh			; '-'
+		je	short loc_117		; Jump if equal
+		jmp	short loc_116
+loc_115:
+		cmp	dl,2
+		je	short loc_121		; Jump if equal
+		mov	dl,1
+		jmp	short loc_120
+loc_116:
+		inc	ah
+		cmp	dl,1
+		mov	dl,3
+		jz	short loc_118		; Jump if zero
+		jmp	short loc_120
+loc_117:
+		cmp	dl,2
+		je	short loc_121		; Jump if equal
+		mov	dl,2
+loc_118:
+		cmp	dh,bl
+		jne	short loc_119		; Jump if not equal
+		mov	word ptr ds:[w1],si
+		mov	byte ptr ds:[w2],ah
+loc_119:
+		inc	bl
+		mov	ah,1
+		mov	si,di
+loc_120:
+		loop	locloop_114		; Loop if cx > 0
+
+		cmp	dl,2
+		je	short loc_121		; Jump if equal
+		cmp	word ptr ds:[w2],0
+		jne	short loc_122		; Jump if not equal
+		mov	word ptr ds:[w1],si
+		mov	byte ptr ds:[w2],ah
+		jmp	short loc_122
+loc_121:
+		stc				; Set carry flag
+		jmp	short loc_123
+loc_122:
+		mov	ah,bl
+		mov	bx,word ptr ds:[w1]
+		mov	cx,word ptr ds:[w2]
+		mov	al,dh
+		clc				; Clear carry flag
+loc_123:
+		pop	di
+		pop	si
+		pop	dx
+		retn
+ENDP
+
+;áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá
+;                              SUBROUTINE
+;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
+PROC	GET_SWITCH
+		push	ax
+		push	bx
+		mov	al,1
+		call	LOCAL_SWITCH
+		mov	cl,ah
+		mov	ch,0
+		pop	bx
+		pop	ax
+		retn
+ENDP
+
+;áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá
+;                              SUBROUTINE
+;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
+PROC	COMPARE_SWITCH
+		push	ax
+		push	bx
+		push	cx
+		push	si
+		call	LOCAL_SWITCH
+		jc	short loc_126		; Jump if carry Set
+
+locloop_124:
+		mov	al,[si]
+		call	TOLOWER
+		mov	ah,al
+		mov	al,es:[bx]
+		call	TOLOWER
+		cmp	al,ah
+		jne	short loc_125		; Jump if not equal
+		inc	si
+		inc	bx
+		loop	locloop_124		; Loop if cx > 0
+
+		cmp	byte ptr [si],0
+loc_125:
+		clc				; Clear carry flag
+loc_126:
+		pop	si
+		pop	cx
+		pop	bx
+		pop	ax
+		retn
+ENDP
+
+;áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá
+;                              SUBROUTINE
+;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
+PROC	PARSE_CMDLN
+sub_46		proc	near
+		pusha				; Save all regs
+		call	GET_SWITCH
+		jc	short loc_131		; Jump if carry Set
+		jcxz	short loc_130		; Jump if cx=0
+		mov	al,1
+		mov	bp,si
+
+locloop_127:
+		mov	bx,bp
+		xor	dx,dx			; Zero register
+loc_128:
+		lea	si,[bx]			; Load effective addr
+		call	COMPARE_SWITCH
+		jc	short loc_131		; Jump if carry Set
+		jnz	short loc_129		; Jump if not zero
+		inc	dx
+		call	word ptr [bx+0Bh]	;*
+loc_129:
+		add	bx,0Dh
+		cmp	byte ptr [bx],0
+		jne	loc_128			; Jump if not equal
+		test	dx,dx
+		jz	short loc_131		; Jump if zero
+		inc	al
+		loop	locloop_127		; Loop if cx > 0
+
+loc_130:
+		clc				; Clear carry flag
+		jmp	short loc_132
+loc_131:
+		stc				; Set carry flag
+loc_132:
+		popa				; Restore all regs
+		retn
+ENDP
+
+data_148	dw	4 dup (0)
+		db	0
+
+
+ENDS
