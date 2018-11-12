@@ -1,8 +1,12 @@
+;
+; 100% bytecode identical with disassembled dosidle (ie with dosidle.asm)
+;
 
 PAGE  59,132
-OPTION SEGMENT:USE16
 
 .586p
+
+SAMESIZE = 1
 
 seg_a		segment	byte public use16 'code'
 		assume cs:seg_a, ds:seg_a, ss:stack_seg_b
@@ -461,24 +465,28 @@ IDLE_MODE_1	=	1      	;enable TESTOMODE
 IDLE_MODE_2	=	2     	;disable FORCEMODE
 idle_mode	db	0
 
+IFDEF	SAMESIZE
+	xchg	bx,bx
+ENDIF
+
 old_intr_21h		dd	0
 new_intr_21h_1		dd	isr_21h_1
 new_intr_21h_2		dd	isr_21h_2
-intr_21h_delay		dd	00000h					
-intr_21h_halts		dd	00000h                             	
-intr_21h_calls		dd	00000h                                	
+intr_21h_delay		dd	0					
+intr_21h_halts		dd	0                             	
+intr_21h_calls		dd	0                                	
 intr_21h_halts_msg	db	' int 21h HLTs executed.', 0
 intr_21h_calls_msg	db	' int 21h calls.', 0
 
 isr_21h_halt_1	proc	near
-	test	idle_mode,IDLE_MODE_2
+	test	cs:idle_mode,IDLE_MODE_2
 	jnz	short loc_ret_29	; Jump if not zero
-	inc	intr_21h_delay
-	cmp	intr_21h_delay,0Ah
+	inc	cs:intr_21h_delay
+	cmp	cs:intr_21h_delay,0Ah
 	jb	short loc_ret_29	; Jump if below
 	sti				; Enable interrupts
 	hlt				; Halt processor
-	inc	intr_21h_halts
+	inc	cs:intr_21h_halts
 
 loc_ret_29:
 	retn
@@ -490,16 +498,23 @@ isr_21h_halt_2	proc	near
 loc_30:
 	mov	ah,0Bh
 	pushf				; Push flags
-	call	dword ptr old_intr_21h
+	call	dword ptr cs:old_intr_21h
 	test	ax,ax
 	jnz	short loc_31		; Jump if not zero
 	hlt				; Halt processor
-	inc	intr_21h_halts
+	inc	cs:intr_21h_halts
 	jmp	short loc_30
 loc_31:
 	pop	ax
 	retn
 isr_21h_halt_2	endp
+
+IFDEF	SAMESIZE
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	nop
+ENDIF
 
 isr_21h_1	proc	far
 	cmp	ah,2Ch			; ','
@@ -518,11 +533,18 @@ loc_33:
 	call	isr_21h_halt_2
 	jmp	short loc_35
 loc_34:
-	mov	dword ptr intr_21h_delay,0
+	mov	dword ptr cs:intr_21h_delay,0
 	mov	dword ptr cs:intr_16h_delay,0
 loc_35:
-	jmp	dword ptr old_intr_21h
+	jmp	dword ptr cs:old_intr_21h
 isr_21h_1	endp			                        
+
+IFDEF SAMESIZE
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	nop
+ENDIF
 
 isr_21h_2	proc	far	
 	push	eax
@@ -585,27 +607,31 @@ loc_39:
 	pop	ds
 	pop	si
 	pop	eax
-	jmp	dword ptr old_intr_21h
+	jmp	dword ptr cs:old_intr_21h
 isr_21h_2	endp
+
+IFDEF	SAMESIZE
+	xchg	bx,bx
+ENDIF
 
 old_intr_16h		dd	0
 new_intr_16h_1		dd	isr_16h_1
 new_intr_16h_2		dd	isr_16h_2
-intr_16h_delay		dd	00000h                                       
-intr_16h_halts		dd	00000h                                       
-intr_16h_calls		dd	00000h                                       
+intr_16h_delay		dd	0                                       
+intr_16h_halts		dd	0                                       
+intr_16h_calls		dd	0                                       
 intr_16h_halts_msg	db	' int 16h HLTs executed.', 0
 intr_16h_calls_msg	db	' int 16h calls.', 0
 
 isr_16h_halt_1	proc	near
-	test	idle_mode,IDLE_MODE_2
+	test	cs:idle_mode,IDLE_MODE_2
 	jnz	short loc_ret_40	; Jump if not zero
-	inc	intr_16h_delay
-	cmp	intr_16h_delay,0Ah
+	inc	cs:intr_16h_delay
+	cmp	cs:intr_16h_delay,0Ah
 	jb	short loc_ret_40	; Jump if below
 	sti				; Enable interrupts
 	hlt				; Halt processor
-	inc	intr_16h_halts
+	inc	cs:intr_16h_halts
 
 loc_ret_40:
 	retn
@@ -619,10 +645,10 @@ isr_16h_halt_2	proc	near
 	sti				; Enable interrupts
 loc_41:
 	pushf				; Push flags
-	call	dword ptr old_intr_16h
+	call	dword ptr cs:old_intr_16h
 	jnz	short loc_42		; Jump if not zero
 	hlt				; Halt processor
-	inc	intr_16h_halts
+	inc	cs:intr_16h_halts
 	mov	ah,ch
 	jmp	short loc_41
 loc_42:
@@ -630,6 +656,15 @@ loc_42:
 	pop	ax
 	retn
 isr_16h_halt_2	endp
+
+IFDEF	SAMESIZE
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	nop
+ENDIF
 
 isr_16h_1	proc	far
 	cmp	ah,12h
@@ -653,11 +688,21 @@ loc_45:
 	call	isr_16h_halt_2
 	jmp	short loc_47
 loc_46:
-	mov	dword ptr intr_16h_delay,0
-	mov	dword ptr intr_21h_delay,0
+	mov	dword ptr cs:intr_16h_delay,0
+	mov	dword ptr cs:intr_21h_delay,0
 loc_47:
-	jmp	dword ptr old_intr_16h
+	jmp	dword ptr cs:old_intr_16h
 isr_16h_1	endp
+
+IFDEF	SAMESIZE
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+ENDIF
 			                        
 isr_16h_2	proc	far
 	push	eax
@@ -726,14 +771,19 @@ loc_52:
 	pop	ds
 	pop	si
 	pop	eax
-	jmp	dword ptr old_intr_16h
+	jmp	dword ptr cs:old_intr_16h
 isr_16h_2	endp
 
-old_intr_14h		dd	?
+IFDEF	SAMESIZE
+	nop
+ENDIF
+
+old_intr_14h		dd	0
 new_intr_14h_1		dd	isr_14h_1
 new_intr_14h_2		dd	isr_14h_2
-intr_14h_calls		dd	00000h                                          
-intr_14h_halts		dd	00000h                                          
+			dd	0
+intr_14h_calls		dd	0                                          
+intr_14h_halts		dd	0                                          
 intr_14h_halts_msg	db	' int 14h HALTs executed.', 0
 intr_14h_calls_msg	db	' int 14h calls.', 0
 
@@ -743,24 +793,33 @@ isr_14h_halt_1	proc	near
 loc_53:
 	mov	ah,3
 	pushf				; Push flags
-	call	dword ptr old_intr_14h
+	call	dword ptr cs:old_intr_14h
 	test	ah,1
 	jnz	short loc_54		; Jump if not zero
 	hlt				; Halt processor
-	inc	intr_14h_calls
+	inc	cs:intr_14h_calls
 	jmp	short loc_53
 loc_54:
 	pop	ax
 	retn
 isr_14h_halt_1	endp
 
+IFDEF	SAMESIZE
+	nop
+ENDIF
+
 isr_14h_1	proc	far
 	cmp	ah,2
 	jne	short loc_55		; Jump if not equal
 	call	isr_14h_halt_1
 loc_55:
-	jmp	dword ptr old_intr_14h
+	jmp	dword ptr cs:old_intr_14h
 isr_14h_1	endp
+
+IFDEF	SAMESIZE
+	xchg	bx,bx
+	nop
+ENDIF
 
 isr_14h_2	proc	far
 	push	eax
@@ -798,8 +857,12 @@ loc_56:
 	pop	ds
 	pop	si
 	pop	eax
-	jmp	dword ptr old_intr_14h
+	jmp	dword ptr cs:old_intr_14h
 isr_14h_2	endp
+
+IFDEF	SAMESIZE
+	nop
+ENDIF
 
 old_irq_01h		dd	00000h  		
 new_irq_01h_1		dd	isr_01h_1		
@@ -808,21 +871,28 @@ irq_01h_calls		dd	0
 irq_01h_calls_msg	db	' IRQ 01h calls.', 0
 
 isr_01h_1	proc	far
-	mov	dword ptr intr_16h_delay,0
-	mov	dword ptr intr_21h_delay,0             	
-	jmp	dword ptr old_irq_01h
+	mov	dword ptr cs:intr_16h_delay,0
+	mov	dword ptr cs:intr_21h_delay,0             	
+	jmp	dword ptr cs:old_irq_01h
 isr_01h_1	endp
+
+IFDEF	SAMESIZE
+	xchg	bx,bx
+	xchg	bx,bx
+	xchg	bx,bx
+	nop
+ENDIF
 
 isr_01h_2	proc	far
 	pushf
-	call 	dword ptr old_irq_01h
+	call 	dword ptr cs:old_irq_01h
 	push	eax
 	push	si
 	push	ds
 	mov	ax,cs
 	mov	ds,ax	
 	mov	al,3
-	mov	ah,37
+	mov	ah,37h
 	call	video_set_pos
 	mov	al,0Ch
 	call	video_set_attribute
@@ -875,7 +945,6 @@ tsr_reactivate	proc	near
 	pop	bx
 	retn
 tsr_reactivate 	endp
-
 
 tsr_hookint	proc	near
 	pushf				; Push flags
@@ -1590,6 +1659,13 @@ local_writech	proc	near
 	retn
 local_writech	endp
 
+IFDEF SAMESIZE
+hex2_table	db	'0123456789ABCDEF'	; Data table (indexed access)
+		db	0C3h
+ELSE
+hex2_table	equ	hex_table
+ENDIF
+
 local_writedec	proc	near
 	push	eax
 	push	ebx
@@ -1611,7 +1687,7 @@ loc_106:
 
 locloop_107:
 	pop	bx
-	mov	al,hex_table[bx]	; ('0123456789ABCDEF')
+	mov	al,cs:hex2_table[bx]	; ('0123456789ABCDEF')
 	call	local_writech
 	loop	locloop_107		; Loop if cx > 0
 
@@ -1622,6 +1698,10 @@ locloop_107:
 	pop	eax
 	retn
 local_writedec	endp
+
+IFDEF SAMESIZE
+	db	0C3h
+ENDIF
 
 local_writehex	proc	near
 	push	ax
@@ -1639,7 +1719,7 @@ locloop_108:
 	rol	ebx,4			; Rotate
 	mov	si,bx
 	and	si,0Fh
-	mov	al,hex_table[si]	; ('0123456789ABCDEF')
+	mov	al,cs:hex2_table[si]	; ('0123456789ABCDEF')
 	call	local_writech
 	loop	locloop_108		; Loop if cx > 0
 
@@ -2116,6 +2196,11 @@ locloop_118:
 	retn
 zero64bytes	endp
 
+IFDEF	SAMESIZE
+	xchg	bx,bx
+	nop
+ENDIF
+
 v86_callback	dd	0
 
 win386_v86_callback_init	proc	near
@@ -2133,13 +2218,13 @@ win386_v86_callback_init	proc	near
 	int	2Fh			; Windows init broadcast
 	test	cx,cx
 	jnz	short loc_119a		; Jump if not zero
-	mov	word ptr v86_callback,si
-	mov	word ptr v86_callback+2,ds
-	cmp	v86_callback,0
+	mov	word ptr cs:v86_callback,si
+	mov	word ptr cs:v86_callback+2,ds
+	cmp	cs:v86_callback,0
 	je	short loc_119a		; Jump if equal
 	cli				; Disable interrupts
 	xor	ax,ax			; Zero register
-	call	dword ptr v86_callback
+	call	dword ptr cs:v86_callback
 	jc	short loc_119a		; Jump if carry Set
 	clc				; Clear carry flag
 	jmp	short loc_119b
@@ -2159,11 +2244,11 @@ win386_v86_callback_exit	proc	near
 	pushad				; Save all regs
 	push	ds 
 	push	es
-	cmp	v86_callback,0
+	cmp	cs:v86_callback,0
 	je	short loc_119e		; Jump if equal
 	cli				; Disable interrupts
 	mov	ax,1
-	call	dword ptr v86_callback
+	call	dword ptr cs:v86_callback
 	mov	ax,1606h
 	xor	dx,dx			; Zero register
 	int	2Fh			; Windows exit broadcast
@@ -2236,8 +2321,8 @@ par_table	par_item <"/H", par_help>
 ;	       	par_item <0>            		; Marks end of par_table. ar_table.
  		db size par_item dup(0)
 
-KERNEL_NAME   equ "CPUidle for DOS"     ; Name of the kernel.
-KERNEL_FILE   equ "DOSidle"             ; Name of the .exe (compiled) kernel.
+KERNEL_NAME   equ "CPUIdle for DOS"     ; Name of the kernel.
+KERNEL_FILE   equ "DOSIDLE"             ; Name of the .exe (compiled) kernel.
 
 msg_proginfo	db	KERNEL_NAME,' V1.32 [Beta]', 0Dh, 0Ah
 		db	'Copyright (C) by Marton Balog, 1998.', 0Dh, 0Ah, 0
@@ -2253,7 +2338,7 @@ msg_uninst	db	KERNEL_NAME,' uninstalled successfully.', 0
 warn_VCPI	db	'WARNING: VCPI host detected.', 0
 warn_DPMI	db	'WARNING: DPMI host detected.', 0
 
-err_str      	db	'FATAL ', 9
+err_str      	db	'FATAL ', 0
 err_resize   	db	'[#10]: Failed to resize program memory.', 0
 err_notinst    	db	'[#20]: CPUIdle for DOS is not installed.', 0
 err_inst   	db	'[#21]: CPUIdle for DOS is already installed.', 0
@@ -2454,6 +2539,10 @@ main	proc	far
 	mov	ax,env_seg
 	call	tsr_install			; Sub does not return here
 main	endp
+
+IFDEF SAMESIZE
+	db	15 dup (0)
+ENDIF
 
 seg_a	ends
 
