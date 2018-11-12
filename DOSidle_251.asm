@@ -25,11 +25,15 @@ PAGE  59,132
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 .586p
 ideal                                   ; Yep, this prog is TASM 4.0 coded!
-;SAMESIZE = 1
+
+SAMESIZE = 1
+IFDEF	SAMESIZE
+WRONG_RESIDENT = 1
+ENDIF
 
 SEGMENT	CODE16	PARA PUBLIC  USE16 'CODE'
-	ASSUME CS: CODE16, DS:CODE16, SS:STACK16
-
+	ASSUME CS: CODE16, DS:NOTHING, SS:STACK16
+RESIDENT_START:
 PROC	mem_lallocate			                        
 	push	bx
 	mov	bx,cx
@@ -126,6 +130,7 @@ loc_1:			                        ;* No entry point to code
 	sti				; Enable interrupts
 	iret				; Interrupt return
 loc_3:
+	ASSUME 	DS: CODE16
 	cmp	bx, ACTION_UNINSTALL
 	jne	short loc_10		; Jump if not equal
 	cli				; Disable interrupts
@@ -323,7 +328,7 @@ exec_calls      dw 200                  ; Count of DOS FN 4bh calls.
 child_name      db 13 dup (0)           ; Name of the child to be executed.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
+	ASSUME 	DS: CODE16
 Proc    _str_cmp                        ; NOTE: Copied from _string.h!!
         push ax cx si di
 
@@ -484,7 +489,7 @@ Proc    int_21h_fn4bh                   ; DOS FN: Execute child process.
 @@read: mov al,[es:di]                  ; Get char of child name in int 21h.
         mov [ds:si + bx],al             ; Save it to our buffer.
 
-        	cmp al,':'                      ; Was it a DRIVE specifier?
+       	cmp al,':'                      ; Was it a DRIVE specifier?
         je short @@kill                 ; Yes.
 
         cmp al,'\'                      ; Was it a PATH separator?
@@ -624,11 +629,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
-IFDEF	SAMESIZE
-	DB 2 DUP (0)
-ELSE
-	Align 16
-ENDIF
+Align 16
 
 Proc    int_21h_handler                 ; DOS functions handler.
         push ax bx ds
@@ -665,6 +666,7 @@ INT_16H_TOPFN   = 12h                   ; Highest FN that is handled.
 
 
 Align 4
+
 old_int_16h     rmdw <0, 0>
 
 int_16h_fntable dw offset int_16h_normalhlt    ; FN 00h: Keyboard input.
@@ -716,11 +718,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
-IFDEF	SAMESIZE
-	DB 12 DUP (0)
-ELSE
-	Align 16
-ENDIF
+Align 16
 
 Proc    int_16h_handler                 ; BIOS keyboard functions handler.
         push ax bx ds
@@ -755,17 +753,14 @@ INT_2FH_TOPFN   = 0ffffh                ; Highest FN that is handled.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-IFDEF	SAMESIZE
-	DB 0
-ELSE
-	Align 4
-ENDIF
+Align 4
 
 old_int_2fh     rmdw <0, 0>
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Align 16
+
 Proc    int_2fh_handler
         push ax dx ds                   ; (AX might be clobbered in int_xxh_forcehlt)
         mov dx,cs                       ;
@@ -795,6 +790,7 @@ Endp
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Align 4
+
 old_int_33h         rmdw <0, 0>
 user_mouse_handler  rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
 user_mouse_mask     dw 0
@@ -803,11 +799,7 @@ dummy_handler_ptr   rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-IFDEF	SAMESIZE
-	DB 2 DUP (0)
-ELSE
-	Align 16
-ENDIF
+Align 16
 
 Proc    int_33h_handler
         sti                                ; (let 'em run!)
@@ -938,11 +930,7 @@ INT_14H_TOPFN   = 03h                   ; Highest FN that is handled.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-IFDEF	SAMESIZE
-	DB 3 DUP (0)
-ELSE
-	Align 4
-ENDIF
+Align 4
 
 old_int_14h     rmdw <0, 0>
 
@@ -986,11 +974,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
-IFDEF	SAMESIZE
-	DB 4 DUP (0)
-ELSE
 	Align 16
-ENDIF
 
 Proc    int_14h_handler                 ; BIOS serial I/O handler.
         push ax bx ds
@@ -1021,11 +1005,7 @@ Endp
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 1xH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-IFDEF	SAMESIZE
-	DB 0
-ELSE
-    	Align 4
-ENDIF
+Align 4
 
 old_int_10h     rmdw <0, 0>             ;
 old_int_15h     rmdw <0, 0>             ; Original vector values.
@@ -1034,6 +1014,7 @@ old_int_15h     rmdw <0, 0>             ; Original vector values.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
+	ASSUME 	DS: NOTHING
 
 Proc    int_10h_handler                 ; BIOS video functions handler.
         mov [cs:int_xxh_fcount],0       ; Zero int xxh force counter.
@@ -1059,11 +1040,7 @@ Endp
 ;°°°°°°°°°°°°°°°°±±±±±±±±±±±±±±± IRQ HANDLERS ±±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-IFDEF	SAMESIZE
-	DB 0
-ELSE
-   	Align 4
-ENDIF
+Align 4
 
 old_masterirqs  rmdw 8 dup (<0, 0>)     ; Original handlers of the hooked IRQs.
 
@@ -1076,11 +1053,7 @@ new_masterirqs  rmdw <OFFSET irq_00_handler, SEG irq_00_handler>, <OFFSET irq_01
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-IFDEF	SAMESIZE
-	DB 8 DUP (0)
-ELSE
-	Align 16
-ENDIF
+Align 16
 
 Proc    irq_00_handler                  ; Handler for IRQ 0 (timer).
         or [cs:irq_flags],IRQ_00        ; Mark that IRQ 0 occurred.
@@ -1165,11 +1138,15 @@ Proc    irq_07_handler                  ; Handler for IRQ 7.
         jmp [dword cs:old_masterirqs + 28] ; Chain to old interrupt handler.
 Endp
 
+RESIDENT_STOP:
+
 IFDEF	SAMESIZE
 	DB 2 DUP (0)
 ELSE
 	Align 16
 ENDIF
+
+	ASSUME 	DS: CODE16
 
 PROC	TSR_INSTCHECK
 	push	bx
@@ -1250,13 +1227,18 @@ PROC	tsr_install
 	mov	ax,[tsr_env_seg]
 	call	mem_lrelease
 	mov	dx,cx
+IFDEF	WRONG_RESIDENT
 	sub	dx,bx
+ELSE
+	nop
+	nop
+ENDIF
 	mov	ax,3100h
 	int	21h				; DOS Services  ah=function 31h
 	ret
 ENDP
 
-;RESIDENT_END:
+
 
 ;ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»;
 ;º ²²²²²²²²²²²²²²²²²²²² INITIALIZATION PART OF PROGRAM ²²²²²²²²²²²²²²²²²²²² º;
@@ -1927,7 +1909,6 @@ Proc    detect_pm
 Endp
 
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-resident_end:
 
 Proc    detect_mouse
         push es
@@ -1989,7 +1970,14 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 
-        mov cx,OFFSET RESIDENT_END             ;
+IFDEF	WRONG_RESIDENT
+RESIDENT_SIZE = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
+RESIDENT_END  = (SEG RESIDENT_STOP ) + RESIDENT_SIZE
+	mov cx,RESIDENT_END
+ELSE
+RESIDENT_SIZE  = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
+        mov cx,RESIDENT_SIZE
+ENDIF
 	mov dx,KERNEL_ID                ;
 	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
@@ -2026,7 +2014,7 @@ IFDEF	SAMESIZE
 	DB 6 DUP (0)
 ELSE
 	Align	16
-ENDIF
+ENDIF	
 
 PROC	strcmp
 ;sub_31		proc	near
@@ -3333,7 +3321,7 @@ intel_0			db	00h
 cpu_intel_01_str	db	'GenuineIntel', 0
 cpu_intel_02_str	db	'Unknown Intel', 0
 cpu_intel_03_str	db	'Intel 486DX at 25/33 Mhz', 0
-cpu_intel_04_str	db	'Intel 486DX at 50 MHz', 0
+cpu_intel_04_str	db	'Intel 486DX at 50 Mhz', 0
 cpu_intel_05_str	db	'Intel 486SX', 0
 cpu_intel_06_str	db	'Intel 486DX2', 0
 cpu_intel_07_str	db	'Intel 486SL', 0
@@ -3527,7 +3515,7 @@ PROC	get_cpu_intel_3
 	call	get_basic_cpu_info_3
 	jmp	short loc_ret_198
 loc_197:
-	call	get_basic_cpu_info
+	call	get_basic_cpu_info_2  
 	jmp	short loc_ret_198
 
 loc_ret_198:
