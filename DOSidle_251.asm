@@ -1170,7 +1170,7 @@ PROC	TSR_HOOKINT
 	xor	esi,esi			; Zero register                                                 
 	mov	es,si                                                   	
 	mov	ecx, size intr_vec_struc                 			
-	mov	si, [numx`_of_vectors_hooked]		        		
+	mov	si, [numx_of_vectors_hooked]		        		
 	inc	[num_of_vectors_hooked]         
 	imul	esi,ecx			           	  			
 	add	si,offset intr_vectors	        
@@ -1273,31 +1273,23 @@ apm_state       db OFF                  ; State of APM (enabled, disabled).
 sys_type        db SYS_RAW              ; Type of system (Raw, VCPI, DPMI).
 
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-;struc	par_item
-;	parrm		db 9 dup (0)
-;	proc_off	db 4 dup (0)		
-;ends
+struc	par_item
+	switch		db 11 dup (0)
+	proc_offset	dw	0		
+ends
 
-MACRO	par_item param,proc_offset:=<0>
-	DB	&param
-	psize	SIZESTR <param>
-	db	13 - psize dup (0)
-	dw 	proc_offset
-ENDM
-
-label	par_table	byte       
-		par_item "-H",   par_help		;par_item <"-H", par_help>                         		
-                par_item "-?",   par_help              	;par_item <"-?", par_help>                         
-                par_item "-U",   par_uninst            	;par_item <"-U", par_uninst>                       
-                par_item "-ON",  par_on                	;par_item <"-ON", par_on>                          
-                par_item "-OFF", par_off              	;par_item <"-OFF", par_off>                        
-                par_item "-CPU", par_cpu              	;par_item <"-CPU", par_cpu>                        
-                par_item "-HLT", par_hlt              	;par_item <"-HLT", par_hlt>                        
-                par_item "-APM", par_apm              	;par_item <"-APM", par_apm>                        
-                par_item "-FM0", par_noforce          	;par_item <"-FM0", par_noforce>                    
-                par_item "-FM1", par_weakforce        	;par_item <"-FM1", par_weakforce>                  
-                par_item "-FM2", par_strongforce      	;par_item <"-FM2", par_strongforce>                
-		par_item ""                            	;par_item <0>            		; Marks end of par_table. ar_table.
+par_table	par_item <"-H", par_help>                         		
+	       	par_item <"-?", par_help>                         
+	       	par_item <"-U", par_uninst>                       
+	       	par_item <"-ON", par_on>                          
+	      	par_item <"-OFF", par_off>                        
+	      	par_item <"-CPU", par_cpu>                        
+	      	par_item <"-HLT", par_hlt>                        
+	      	par_item <"-APM", par_apm>                        
+	      	par_item <"-FM0", par_noforce>                    
+	      	par_item <"-FM1", par_weakforce>                  
+	      	par_item <"-FM2", par_strongforce>                
+	       	par_item <0>            		; Marks end of par_table. ar_table.
 
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
@@ -1923,7 +1915,7 @@ Proc    detect_mouse
         test ebx, ebx
         jz @@no_mouse
 
-        ror ebx,16
+        ror ebx,	16
         mov es,bx
         rol ebx,16
         mov al,[byte ptr es:bx]
@@ -2012,312 +2004,2064 @@ ENDS
 SEGMENT	CODEI	PARA PUBLIC 'CODE'
 	ASSUME CS: CODEI, DS:CODEI, ES:CODEI, SS:STACK16
 
+PROC	strcmp
+;sub_31		proc	near
+	push	ax cx si di
+	mov	cx,0FFh
+
+locloop_104:
+	mov	al,[si]
+	cmp	al,es:[di]
+	jne	short loc_105		; Jump if not equal
+	test	al,al
+	jz	short loc_105		; Jump if zero
+	inc	si
+	inc	di
+	loop	locloop_104		; Loop if cx > 0
+
+loc_105:
+	pop	di si cx ax
+	retn
+ENDP
+
 PROC	strcpy
-		push	ax cx si di
-		mov	cx,0FFh
+;sub_32		proc	near
+	push	ax cx si di
+	mov	cx,0FFh
 
 locloop_106:
-		mov	al,[si]
-		mov	es:[di],al
-		inc	si
-		inc	di
-		test	al,al
-		loopnz	locloop_106		; Loop if zf=0, cx>0
+	mov	al,[si]
+	mov	es:[di],al
+	inc	si
+	inc	di
+	test	al,al
+	loopnz	locloop_106		; Loop if zf=0, cx>0
 
-		pop	di si cx ax
-		retn
+	pop	di si cx ax
+	retn
 ENDP
-		db	14 dup (0)
 
 PROC	LOCAL_WRITESTR
-		push	ax cx si
-		mov	cx,0FFh
+	push	ax cx si
+	mov	cx,0FFh
 
 locloop_107:
-		mov	al,[si]
-		cmp	al,0
-		je	short loc_108		; Jump if equal
-		call	LOCAL_WRITECH
-		inc	si
-		loop	locloop_107		; Loop if cx > 0
+	mov	al,[si]
+	cmp	al,0
+	je	short loc_108		; Jump if equal
+	call	LOCAL_WRITECH
+	inc	si
+	loop	locloop_107		; Loop if cx > 0
 
 loc_108:
-		pop	si cx ax
-		retn
+	pop	si cx ax
+	retn
 ENDP
 
 PROC	LOCAL_WRITELN
-		push	ax
-		call	LOCAL_WRITESTR
-		mov	al,CR
-		call	LOCAL_WRITECH
-		mov	al,LF
-		call	LOCAL_WRITECH
-		pop	ax
-		retn
+	push	ax
+	call	LOCAL_WRITESTR
+	mov	al,CR
+	call	LOCAL_WRITECH
+	mov	al,LF
+	call	LOCAL_WRITECH
+	pop	ax
+	retn
 ENDP
 
 PROC	LOCAL_WRITECH         			;write character
-		push	bx cx dx ds ax
-		mov	bx,dx
-		mov	cx,1
-		mov	ax,ss
-		mov	ds,ax
-		mov	dx,sp
-		mov	ah,40h
-		int	21h			; DOS Services  ah=function 40h
-						;  write file  bx=file handle
-						;   cx=bytes from ds:dx buffer
-		pop	ax ds dx cx bx
-		retn
+	push	bx cx dx ds ax
+	mov	bx,dx
+	mov	cx,1
+	mov	ax,ss
+	mov	ds,ax
+	mov	dx,sp
+	mov	ah,40h
+	int	21h			; DOS Services  ah=function 40h
+					;  write file  bx=file handle
+					;   cx=bytes from ds:dx buffer
+	pop	ax ds dx cx bx
+	retn
 ENDP
+
 hex_table	db	'0123456789ABCDEF'
 
 PROC	LOCAL_WRITEDEC
-		push	eax ebx cx edx si
-		mov	ebx, 10
-		mov	si,dx
-		xor	cx,cx			; Zero register
+	push	eax ebx cx edx si
+	mov	ebx, 10
+	mov	si,dx
+	xor	cx,cx			; Zero register
 loc_109:
-		xor	edx,edx			; Zero register
-		div	ebx			; ax,dx rem=dx:ax/reg
-		push	dx
-		inc	cl
-		test	eax,eax
-		jnz	loc_109			; Jump if not zero
-		mov	dx,si
+	xor	edx,edx			; Zero register
+	div	ebx			; ax,dx rem=dx:ax/reg
+	push	dx
+	inc	cl
+	test	eax,eax
+	jnz	loc_109			; Jump if not zero
+	mov	dx,si
 
 locloop_110:
-		pop	bx
-		mov	al,byte ptr cs:[hex_table][bx]
-		call	LOCAL_WRITECH
-		loop	locloop_110		; Loop if cx > 0
+	pop	bx
+	mov	al,byte ptr cs:[hex_table][bx]
+	call	LOCAL_WRITECH
+	loop	locloop_110		; Loop if cx > 0
 
-		pop	si edx cx ebx eax
-		retn
+	pop	si edx cx ebx eax
+	retn
 ENDP
 
 PROC	CON_WRITEF
-		push	dx
-		mov	dx,1
-		call	LOCAL_WRITESTR
-		pop	dx
-		retn
+	push	dx
+	mov	dx,1
+	call	LOCAL_WRITESTR
+	pop	dx
+	retn
 ENDP
 
 PROC	CON_WRITELN
-		push	dx
-		mov	dx,1
-		call	LOCAL_WRITELN
-		pop	dx
-		retn
+	push	dx
+	mov	dx,1
+	call	LOCAL_WRITELN
+	pop	dx
+	retn
 ENDP
 
 PROC	CON_WRITECH
-		push	dx
-		mov	dx,1
-		call	LOCAL_WRITECH
-		pop	dx
-		retn
+	push	dx
+	mov	dx,1
+	call	LOCAL_WRITECH
+	pop	dx
+	retn
 ENDP
 
 PROC	CON_WRITEDEC
-		push	dx
-		mov	dx,1
-		call	LOCAL_WRITEDEC
-		pop	dx
-		retn
+	push	dx
+	mov	dx,1
+	call	LOCAL_WRITEDEC
+	pop	dx
+	retn
 ENDP
-		db	0, 0, 0, 0, 0, 0
 
 PROC	TOLOWER
-		cmp	al,41h			; 'A'
-		jb	short loc_ret_111	; Jump if below
-		cmp	al,5Ah			; 'Z'
-		ja	short loc_ret_111	; Jump if above
-		add	al,20h			; ' '
+	cmp	al,41h			; 'A'
+	jb	short loc_ret_111	; Jump if below
+	cmp	al,5Ah			; 'Z'
+	ja	short loc_ret_111	; Jump if above
+	add	al,20h			; ' '
 
 loc_ret_111:
 		retn
 ENDP
 
 PROC	isspace
-		cmp	al,20h			; ' '
-		je	short loc_ret_112	; Jump if equal
-		cmp	al,9
-		je	short loc_ret_112	; Jump if equal
+	cmp	al,20h			; ' '
+	je	short loc_ret_112	; Jump if equal
+	cmp	al,9
+	je	short loc_ret_112	; Jump if equal
 
 loc_ret_112:
 		retn
 ENDP
 
 PROC	LOCAL_SWITCH
-		jmp	short loc_113
-		w1	dw	0
-		w2	dw 	0
+	jmp	short loc_113
+	w1	dw	0
+	w2	dw 	0
 loc_113:
-		push	dx
-		push	si
-		push	di
-		mov	word ptr ds:[w1],0
-		mov	word ptr ds:[w2],0
-		mov	dh,al
-		xor	ah,ah			; Zero register
-		xor	bl,bl			; Zero register
-		mov	dl,1
-		movzx	cx,byte ptr es:[di]	; Mov w/zero extend
-		jcxz	short loc_122		; Jump if cx=0
+	push	dx si di
+	mov	word ptr ds:[w1],0
+	mov	word ptr ds:[w2],0
+	mov	dh,al
+	xor	ah,ah			; Zero register
+	xor	bl,bl			; Zero register
+	mov	dl,1
+	movzx	cx,byte ptr es:[di]	; Mov w/zero extend
+	jcxz	short loc_122		; Jump if cx=0
 
 locloop_114:
-		inc	di
-		mov	al,es:[di]
-		call	isspace
-		jz	short loc_115		; Jump if zero
-		cmp	al,2Dh			; '-'
-		je	short loc_117		; Jump if equal
-		jmp	short loc_116
+	inc	di
+	mov	al,es:[di]
+	call	isspace
+	jz	short loc_115		; Jump if zero
+	cmp	al,'-'			; '-'
+	je	short loc_117		; Jump if equal
+	jmp	short loc_116
 loc_115:
-		cmp	dl,2
-		je	short loc_121		; Jump if equal
-		mov	dl,1
-		jmp	short loc_120
+	cmp	dl,2
+	je	short loc_121		; Jump if equal
+	mov	dl,1
+	jmp	short loc_120
 loc_116:
-		inc	ah
-		cmp	dl,1
-		mov	dl,3
-		jz	short loc_118		; Jump if zero
-		jmp	short loc_120
+	inc	ah
+	cmp	dl,1
+	mov	dl,3
+	jz	short loc_118		; Jump if zero
+	jmp	short loc_120
 loc_117:
-		cmp	dl,2
-		je	short loc_121		; Jump if equal
-		mov	dl,2
+	cmp	dl,2
+	je	short loc_121		; Jump if equal
+	mov	dl,2
 loc_118:
-		cmp	dh,bl
-		jne	short loc_119		; Jump if not equal
-		mov	word ptr ds:[w1],si
-		mov	byte ptr ds:[w2],ah
+	cmp	dh,bl
+	jne	short loc_119		; Jump if not equal
+	mov	word ptr ds:[w1],si
+	mov	byte ptr ds:[w2],ah
 loc_119:
-		inc	bl
-		mov	ah,1
-		mov	si,di
+	inc	bl
+	mov	ah,1
+	mov	si,di
 loc_120:
-		loop	locloop_114		; Loop if cx > 0
+	loop	locloop_114		; Loop if cx > 0
 
-		cmp	dl,2
-		je	short loc_121		; Jump if equal
-		cmp	word ptr ds:[w2],0
-		jne	short loc_122		; Jump if not equal
-		mov	word ptr ds:[w1],si
-		mov	byte ptr ds:[w2],ah
-		jmp	short loc_122
+	cmp	dl,2
+	je	short loc_121		; Jump if equal
+	cmp	word ptr ds:[w2],0
+	jne	short loc_122		; Jump if not equal
+	mov	word ptr ds:[w1],si
+	mov	byte ptr ds:[w2],ah
+	jmp	short loc_122
 loc_121:
-		stc				; Set carry flag
-		jmp	short loc_123
+	stc				; Set carry flag
+	jmp	short loc_123
 loc_122:
-		mov	ah,bl
-		mov	bx,word ptr ds:[w1]
-		mov	cx,word ptr ds:[w2]
-		mov	al,dh
-		clc				; Clear carry flag
+	mov	ah,bl
+	mov	bx,word ptr ds:[w1]
+	mov	cx,word ptr ds:[w2]
+	mov	al,dh
+	clc				; Clear carry flag
 loc_123:
-		pop	di
-		pop	si
-		pop	dx
-		retn
+	pop	di si dx
+	retn
 ENDP
 
-;áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá
-;                              SUBROUTINE
-;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
 PROC	GET_SWITCH
-		push	ax
-		push	bx
-		mov	al,1
-		call	LOCAL_SWITCH
-		mov	cl,ah
-		mov	ch,0
-		pop	bx
-		pop	ax
-		retn
+	push	ax bx
+	mov	al,1
+	call	LOCAL_SWITCH
+	mov	cl,ah
+	mov	ch,0
+	pop	bx ax
+	retn
 ENDP
 
-;áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá
-;                              SUBROUTINE
-;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
 PROC	COMPARE_SWITCH
-		push	ax
-		push	bx
-		push	cx
-		push	si
-		call	LOCAL_SWITCH
-		jc	short loc_126		; Jump if carry Set
+	push	ax bx cx si
+	call	LOCAL_SWITCH
+	jc	short loc_126		; Jump if carry Set
 
 locloop_124:
-		mov	al,[si]
-		call	TOLOWER
-		mov	ah,al
-		mov	al,es:[bx]
-		call	TOLOWER
-		cmp	al,ah
-		jne	short loc_125		; Jump if not equal
-		inc	si
-		inc	bx
-		loop	locloop_124		; Loop if cx > 0
+	mov	al,[si]
+	call	TOLOWER
+	mov	ah,al
+	mov	al,es:[bx]
+	call	TOLOWER
+	cmp	al,ah
+	jne	short loc_125		; Jump if not equal
+	inc	si
+	inc	bx
+	loop	locloop_124		; Loop if cx > 0
 
-		cmp	byte ptr [si],0
+	cmp	byte ptr [si],0
 loc_125:
-		clc				; Clear carry flag
+	clc				; Clear carry flag
 loc_126:
-		pop	si
-		pop	cx
-		pop	bx
-		pop	ax
-		retn
+	pop	si cx bx ax
+	retn
 ENDP
 
-;áááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááá
-;                              SUBROUTINE
-;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
 PROC	PARSE_CMDLN
-sub_46		proc	near
-		pusha				; Save all regs
-		call	GET_SWITCH
-		jc	short loc_131		; Jump if carry Set
-		jcxz	short loc_130		; Jump if cx=0
-		mov	al,1
-		mov	bp,si
+	pusha				; Save all regs
+	call	GET_SWITCH
+	jc	short loc_131		; Jump if carry Set
+	jcxz	short loc_130		; Jump if cx=0
+	mov	al,1
+	mov	bp,si
 
 locloop_127:
-		mov	bx,bp
-		xor	dx,dx			; Zero register
+	mov	bx,bp
+	xor	dx,dx			; Zero register
 loc_128:
-		lea	si,[bx]			; Load effective addr
-		call	COMPARE_SWITCH
-		jc	short loc_131		; Jump if carry Set
-		jnz	short loc_129		; Jump if not zero
-		inc	dx
-		call	word ptr [bx+0Bh]	;*
+	lea	si,[(par_item bx).switch]			; Load effective addr
+	call	COMPARE_SWITCH
+	jc	short loc_131		; Jump if carry Set
+	jnz	short loc_129		; Jump if not zero
+	inc	dx
+	call	word ptr [(par_item bx).proc_offset]	;*
 loc_129:
-		add	bx,0Dh
-		cmp	byte ptr [bx],0
-		jne	loc_128			; Jump if not equal
-		test	dx,dx
-		jz	short loc_131		; Jump if zero
-		inc	al
-		loop	locloop_127		; Loop if cx > 0
+	add	bx, size par_item
+	cmp	byte ptr [bx],0
+	jne	loc_128			; Jump if not equal
+	test	dx,dx
+	jz	short loc_131		; Jump if zero
+	inc	al
+	loop	locloop_127		; Loop if cx > 0
 
 loc_130:
-		clc				; Clear carry flag
-		jmp	short loc_132
+	clc				; Clear carry flag
+	jmp	short loc_132
 loc_131:
-		stc				; Set carry flag
+	stc				; Set carry flag
 loc_132:
-		popa				; Restore all regs
-		retn
+	popa				; Restore all regs
+	retn
 ENDP
 
 data_148	dw	4 dup (0)
 		db	0
 
+PROC	TEST_CPU
+;	cpu types
+;	0	8086	
+;	2       286 
+;	3       386
+;	4       486 
+;	cpuid   pentium or better
+	pushf				; Push flags
+	push	bx cx ax 
+	pushf				; Push flags
+	pop	ax
+	mov	cx,ax
+	and	ax,0FFFh
+	push	ax
+	popf				; Pop flags
+	pushf				; Push flags
+	pop	ax
+	and	ax,0F000h
+	cmp	ax,0F000h                                                               
+	mov	al,0															
+	jz	short loc_133		; Jump if zero                                  
+	or	cx,0F000h                                                               
+	push	cx                                                                      
+	popf				; Pop flags
+	pushf				; Push flags
+	pop	ax
+	and	ax,0F000h
+	mov	al,2			
+	jz	short loc_133		; Jump if zero
+	mov	bx,sp
+	and	sp,0FFFCh
+	pushfd				; Push flags
+	pop	eax
+	mov	ecx,eax
+	xor	eax,40000h
+	push	eax
+	popfd				; Pop flags
+	pushfd				; Push flags
+	pop	eax
+	mov	sp,bx
+	xor	eax,ecx
+	mov	al,3
+	jz	short loc_133		; Jump if zero
+	and	sp,0FFFCh
+	push	ecx
+	popfd				; Pop flags
+	mov	sp,bx
+	mov	eax,ecx
+	xor	eax,200000h
+	push	eax
+	popfd				; Pop flags
+	pushfd				; Push flags
+	pop	eax
+	xor	eax,ecx
+	mov	al,4
+	jz	short loc_133		; Jump if zero
+	mov	eax,1
+	cpuid				; get ID into ebx
+	and	ax,0F00h
+	shr	ax,8			; Shift w/zeros fill
+loc_133:
+	mov	bl,al
+	pop	ax
+	mov	al,bl
+	pop	cx bx
+	popf				; Pop flags
+	retn
+ENDP
+
+PROC	TEST_FPU
+	jmp	short loc_134
+	w3	dw	0       
+loc_134:
+	push	bx ax
+	fninit				; Initialize math uP
+	mov	ds:[w3],5A5Ah
+	fnstsw	ds:[w3]	; Store status word
+	mov	bl,0
+	cmp	ds:[w3],0
+	jne	short loc_135		; Jump if not equal
+	fnstcw	ds:[w3]	; Store control word
+	mov	ax, ds:[s3]
+	and	ax,103Fh
+	cmp	ax,3Fh
+	mov	bl,0
+	jnz	short loc_135		; Jump if not zero
+	call	sub_47
+	mov	bl,al
+	cmp	al,3
+	jne	short loc_135		; Jump if not equal
+	fld1				; Push +1.0 to stack
+	fldz				; Push +0.0 to stack
+	fdivp	st(1),st		; st(#)=st(#)/st, pop
+	fld	st			; Push onto stack
+	fchs				; Change sign in st
+	fcompp				; Compare st & pop 2
+	fstsw	ds:[w3]	; Store status word
+	mov	ax, ds:[w3]
+	mov	bl,2
+	sahf				; Store ah into flags
+	jz	short loc_135		; Jump if zero
+	mov	bl,3
+loc_135:
+	pop	ax
+	mov	al,bl
+	pop	bx
+	retn
+ENDP
+
+EMS_BIOS	= 019Ch ;67h * 4	;INTR 67H LIM EMS
+
+PROC	TEST_VCPI
+	push	ax bx es
+	xor	ax,ax			; Zero register
+	mov	es,ax
+	cmp	dword ptr es:EMS_BIOS,0
+	sete	ah			; Set byte if equal
+	jz	short loc_136		; Jump if zero
+	mov	ax,0DE00h
+	int	67h			; EMS Memory        ah=func DEh
+						;  VCPI active  ah=1, bx=version
+loc_136:
+	test	ah,ah
+	pop	es bx ax
+	retn
+ENDP
+
+PROC	TEST_DPMI
+	pusha				; Save all regs
+	push	es
+	mov	ax,1687h
+	int	2Fh			; ??INT Non-standard interrupt
+	test	ax,ax
+	jnz	short loc_137		; Jump if not zero
+	cmp	bl,1
+loc_137:
+	pop	es
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	TEST_V86
+	push	ax
+	smsw	ax			; Store machine stat
+	and	al,1
+	cmp	al,1
+	pop	ax
+	retn
+ENDP
+
+PROC	IRQ_GETPIC
+	mov	bx,7008h
+	retn
+ENDP
+
+PROC	WIN386_V86_CALLBACK_INIT
+	pushad				; Save all regs
+	push	ds es
+	mov	ax,1605h
+	xor	bx,bx			; Zero register
+	mov	es,bx
+	xor	si,si			; Zero register
+	mov	ds,si
+	xor	dx,dx			; Zero register
+	xor	cx,cx			; Zero register
+	mov	di,30Bh
+	int	2Fh			; Windows init broadcast
+	test	cx,cx
+	jnz	short loc_138		; Jump if not zero
+	mov	cs:v86_callback,si
+	mov	word ptr cs:v86_callback+2,ds
+	cmp	dword ptr cs:v86_callback,0
+	je	short loc_138		; Jump if equal
+	cli				; Disable interrupts
+	xor	ax,ax			; Zero register
+	call	dword ptr cs:v86_callback
+	jc	short loc_138		; Jump if carry Set
+	clc				; Clear carry flag
+	jmp	short loc_139
+loc_138:
+	mov	ax,1606h
+	xor	dx,dx			; Zero register
+	int	2Fh			; Windows exit broadcast
+	stc				; Set carry flag
+loc_139:
+	pop	es ds
+	popad				; Restore all regs
+	retn
+ENDP
+
+PROC	WIN386_V86_CALLBACK_EXIT
+	pushad				; Save all regs
+	push	ds es
+	cmp	dword ptr cs:v86_callback,0
+	je	short loc_140		; Jump if equal
+	cli				; Disable interrupts
+	mov	ax,1
+	call	dword ptr cs:v86_callback
+	mov	ax,1606h
+	xor	dx,dx			; Zero register
+	int	2Fh			; Windows exit broadcast
+loc_140:
+	pop	es ds
+	popad				; Restore all regs
+	retn
+ENDP
+
+PROC	VCPI_GETPIC
+	push	ax
+	push	cx
+	mov	ax,0DE0Ah
+	int	67h			; EMS Memory        ah=func DEh
+					;  VCPI get int vector maps
+	mov	bh,cl
+	call	clear_if_zero
+	pop	cx
+	pop	ax
+	retn
+ENDP
+
+PROC	clear_if_zero
+	test	ah,ah
+	clc				; Clear carry flag
+	jz	short loc_ret_141	; Jump if zero
+	stc				; Set carry flag
+
+loc_ret_141:
+	retn
+ENDP
+
+PROC	is_486sx
+;sub_57		proc	near
+	push	eax ebx ecx
+	mov	bx,sp
+	and	sp,0FFFCh
+	pushfd				; Push flags
+	pop	eax
+	mov	ecx,eax
+	xor	eax,4 00 00h
+	push	eax
+	popfd				; Pop flags
+	pushfd				; Push flags
+	pop	eax
+	mov	sp,bx
+	cmp	eax,ecx
+	je	short loc_142		; Jump if equal
+	and	sp,0FFFCh
+	push	ecx
+	popfd				; Pop flags
+	mov	sp,bx
+	xor	al,al			; Zero register
+	jmp	short loc_143
+loc_142:
+	xor	al,al			; Zero register
+	inc	al
+loc_143:
+	pop	ecx ebx eax 
+	retn
+ENDP
+
+PROC	is_cpuid_available
+;sub_58		proc	near
+	push	eax
+	push	ebx
+	pushfd				; Push flags
+	pop	eax
+	mov	ebx,eax
+	xor	eax,200000h
+	push	eax
+	popfd				; Pop flags
+	pushfd				; Push flags
+	pop	eax
+	cmp	eax,ebx
+	je	short loc_144		; Jump if equal
+	xor	al,al			; Zero register
+	jmp	short loc_145
+loc_144:
+	xor	al,al			; Zero register
+	inc	al
+loc_145:
+	pop	ebx
+	pop	eax
+	retn
+END
+
+PROC	get_basic_cpuid
+;sub_59		proc	near
+	push	ebx ecx edx
+	xor	eax,eax			; Zero register
+	cpuid				; get ID into ebx
+	mov	highest_basic_cpuid,eax
+	mov	[dword cpuid_str1+1],ebx
+	mov	[cpuid_str3],edx
+	mov	[cpuid_str2],ecx
+	pop	edx ecx ebx
+	retn
+ENDP
+
+PROC	get_basic_cpu_info
+;sub_60		proc	near
+	pushad				; Save all regs
+	mov	eax,1
+	cpuid				; get ID into ebx
+	mov	bx,ax
+	and	al,0Fh
+	mov	[cpu_stepping],al 	
+	mov	al,bl
+	shr	al,4			; Shift w/zeros fill
+	mov	[cpu_model],al 	
+	mov	ah,bh
+	and	ah,0Fh   	
+	mov	[cpu_family_id],ah     
+	mov	ah,bh
+	shr	ah,4			; Shift w/zeros fill
+	mov	[cpu_type],ah 	
+	mov	[cpu_features],edx   	
+	popad				; Restore all regs
+	retn
+ENDP
+
+PROC  	get_extended_cpuid
+;sub_61		proc	near
+	push	ebx ecx edx
+	mov	eax,80000000h
+	cpuid				; get ID into ebx
+	mov	highest_extended_cpuid,eax
+	pop	edx ecx ebx
+	retn
+ENDP
+
+PROC 	get_cpu_brandstring
+;sub_62		proc	near
+	pushad				; Save all regs
+	mov	eax,80000002h
+	cpuid				; get ID into ebx
+	mov	cpu_bstring1,eax
+	mov	cpu_bstring2,ebx
+	mov	cpu_bstring3,ecx
+	mov	cpu_bstring4,edx
+	mov	eax,80000003h
+	cpuid				; get ID into ebx
+	mov	cpu_bstring5,eax
+	mov	cpu_bstring6,ebx
+	mov	cpu_bstring7,ecx
+	mov	cpu_bstring8,edx
+	mov	eax,80000004h
+	cpuid				; get ID into ebx
+	mov	cpu_bstring9 ,eax
+	mov	cpu_bstring10,ebx
+	mov	cpu_bstring11,ecx
+	mov	cpu_bstring12,edx
+	mov	dword ptr cpuid_str1,0
+	popad				; Restore all regs
+	retn
+ENDP
+
+		db	'Standard 80386', 0
+		db	'Standard 80386 with 80387', 0
+		db	'Standard 80486SX', 0
+		db	'Standard 80486DX', 0
+
+PROC	get_cpus
+;sub_63		proc	near
+	push	eax
+	push	ecx
+	call	test_cpu                      
+	cmp	al,3                                              
+	jb	loc_145a	                                  
+	call	is_cpuid_available	
+	jz	loc_145a	                        
+	call	get_cpu_intel_1		
+	jz	loc_145a	                        
+	call	get_cpu_amd_3		
+	jz	loc_145a	                        
+	call	initial_cpu_check	
+	jz	loc_145a	                        
+	call	get_cpu_Centaur_1	
+	jz	loc_145a	                        
+	call	get_cpu_nexgen_1	
+	jz	loc_145a	                        
+	call	get_cpu_intel_6		
+	jz	loc_145a	
+	xor	al,al
+	jmp	loc_145b	
+loc_145a:
+1aff:
+	xor	al,al
+	inc	al
+loc_145b:
+	pop	ecx
+	pop	eax
+	retn
+ENDP
+
+;šššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššš
+PROC	get_cpu_early_model
+;sub_64		proc	near
+	pushad				; Save all regs
+	call	is_486sx
+	jz	short loc_146		; Jump if zero
+	mov	si,1A82h
+	call	test_fpu
+	cmp	al,0
+	je	short loc_147		; Jump if equal
+	mov	si,1A91h
+	jmp	short loc_147
+loc_146:
+	mov	si,1AABh
+	call	test_fpu
+	cmp	al,0
+	je	short loc_147		; Jump if equal
+	mov	si,1ABCh
+	jmp	short loc_147
+loc_147:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popad				; Restore all regs
+	retn
+ENDP
+
+		db	 00h, 00h, 00h, 43h, 79h
+		db	'rixInstead', 0
+		db	'Unknown Cyrix', 0
+		db	'Cyrix 486SLC', 0
+		db	'Cyrix 486DLC', 0
+		db	'Cyrix 486SLC2', 0
+		db	'Cyrix 486DLC2', 0
+		db	'Cyrix 486SRx', 0
+		db	'Cyrix 486DRx', 0
+		db	'Cyrix 486SRx2', 0
+		db	'Cyrix 486DRx2', 0
+		db	'Cyrix 486SRu', 0
+		db	'Cyrix 486DRu', 0
+		db	'Cyrix 486SRu2', 0
+		db	'Cyrix 486DRu2', 0
+		db	'Cyrix 486S', 0
+		db	'Cyrix 486S2', 0
+		db	'Cyrix 486Se', 0
+		db	'Cyrix 486S2e', 0
+		db	'Cyrix 486DX', 0
+		db	'Cyrix 486DX2', 0
+		db	'Cyrix 486SLC/DLC', 0
+		db	'Cyrix 486Sa', 0
+		db	'Cyrix 486DX4', 0
+		db	'Cyrix 5x86', 0
+		db	'Cyrix 6x86', 0
+		db	'Cyrix 6x86L', 0
+		db	'Cyrix 6x86MX', 0
+		db	'Cyrix MediaGX', 0
+		db	'Cyrix GXm', 0
+
+PROC	cyrix_io_port_1
+;sub_65		proc	near
+	push	ax
+	pushf				; Push flags
+	cli				; Disable interrupts
+	out	22h,al			; port 22h, C&T NEAT,Index Reg
+	in	al,23h			; port 23h, C&T NEAT, Data Reg
+	mov	bl,al
+	sti				; Enable interrupts
+	popf				; Pop flags
+	pop	ax
+	retn
+ENDP
+
+PROC    cyrix_io_port_2
+;sub_66		proc	near
+	push	ax
+	pushf				; Push flags
+	cli				; Disable interrupts
+	out	22h,al			; port 22h, C&T NEAT,Index Reg
+	mov	al,bl
+	out	23h,al			; port 23h, C&T NEAT, Data Reg
+	sti				; Enable interrupts
+	popf				; Pop flags
+	pop	ax
+	retn
+ENDP
+
+PROC	get_cyrix_1
+;sub_67		proc	near
+	push	ax bx dx
+	mov	dl,bl
+	call	cyrix_io_port_1
+	mov	dh,bl
+	and	bl,dl
+	cmp	bl,dl
+	je	short loc_148		; Jump if equal
+	mov	bl,dh
+	or	bl,dl
+	call	cyrix_io_port_2
+	push	ax
+	mov	al,0C0h
+	call	cyrix_io_port_1
+	pop	ax
+	call	cyrix_io_port_1
+	cmp	bl,dh
+	je	short loc_149		; Jump if equal
+loc_148:
+	clc				; Clear carry flag
+	jmp	short loc_150
+loc_149:
+	stc				; Set carry flag
+loc_150:
+	pop	dx bx ax 
+	retn
+ENDP
+
+PROC	get_cyrix_2
+;sub_68		proc	near
+	push	ax bx dx 
+	mov	dl,bl
+	call	cyrix_io_port_1
+	mov	dh,bl
+	and	bl,dl
+	jz	short loc_151		; Jump if zero
+	mov	bl,dh
+	not	dl
+	and	bl,dl
+	call	cyrix_io_port_2
+	push	ax
+	mov	al,0C0h
+	call	cyrix_io_port_1
+	pop	ax
+	call	cyrix_io_port_1
+	not	dl
+	and	bl,dl
+	jnz	short loc_152		; Jump if not zero
+loc_151:
+	clc				; Clear carry flag
+	jmp	short loc_153
+loc_152:
+	stc				; Set carry flag
+loc_153:
+	pop	dx bx ax 
+	retn
+ENDP
+
+PROC	get_cyrix_3
+;sub_69		proc	near
+	push	ax bx dx
+	mov	al,0C2h
+	call	cyrix_io_port_1
+	mov	dh,bl
+	mov	al,0C2h
+	xor	bl,4
+	call	cyrix_io_port_2
+	mov	al,0C0h
+	call	cyrix_io_port_1
+	mov	al,0C2h
+	call	cyrix_io_port_1
+	mov	dl,bl
+	mov	al,0C2h
+	mov	bl,dh
+	call	cyrix_io_port_2
+	cmp	dl,dh
+	je	short loc_154		; Jump if equal
+	xor	al,al			; Zero register
+	jmp	short loc_155
+loc_154:
+	xor	al,al			; Zero register
+	inc	al
+loc_155:
+	pop	dx bx ax
+	retn
+ENDP
+
+PROC	get_cyrix_4
+;sub_70		proc	near
+	push	ax bx dx
+	mov	al,0C3h
+	call	cyrix_io_port_1
+	mov	dh,bl
+	mov	al,0C3h
+	xor	bl,80h
+	call	cyrix_io_port_2
+	mov	al,0C0h
+	call	cyrix_io_port_1
+	mov	al,0C3h
+	call	cyrix_io_port_1
+	mov	dl,bl
+	mov	al,0C3h
+	mov	bl,dh
+	call	cyrix_io_port_2
+	cmp	dl,dh
+	je	short loc_156		; Jump if equal
+	xor	al,al			; Zero register
+	jmp	short loc_157
+loc_156:
+	xor	al,al			; Zero register
+	inc	al
+loc_157:
+	pop	dx bx ax
+	retn
+ENDP
+
+PROC	get_cpu_cyrix
+;sub_71		proc	near
+	push	ax bx dx
+	xor	dx,dx			; Zero register
+	call	get_cyrix_3
+	sete	dl			; Set byte if equal
+	call	get_cyrix_4
+	sete	dh			; Set byte if equal
+	cmp	dh,1
+	jne	short loc_158		; Jump if not equal
+	mov	al,0FEh
+	call	cyrix_io_port_1
+	mov	AMDn_string,bl
+	mov	al,0FFh
+	call	cyrix_io_port_1
+	mov	AMDs_string,bl
+	jmp	short loc_160
+loc_158:
+	cmp	dl,1
+	jne	short loc_159		; Jump if not equal
+	mov	byte ptr AMDn_string,0FEh
+	jmp	short loc_160
+loc_159:
+	mov	byte ptr AMDn_string,0FDh
+	mov	byte ptr AMDs_string,1
+loc_160:
+	pop	dx bx ax
+	retn
+ENDP
+
+PROC	get_cpu_brandstring2
+;sub_72		proc	near
+	call	get_cpu_brandstring
+	retn
+ENDP
+
+PROC	get_cpu_amd_1
+;sub_73		proc	near
+	pusha				; Save all regs
+	call	get_basic_cpu_info
+	mov	al,[cpu_family_id]
+	mov	bl,[cpu_model]
+	cmp	al,4
+	je	short loc_161		; Jump if equal
+	cmp	al,5
+	je	short loc_163		; Jump if equal
+	cmp	al,6
+	je	short loc_162		; Jump if equal
+	jmp	short loc_164
+loc_161:
+	mov	byte ptr [AMD_cpu_string+12h],6	; ('w')
+	mov	si,1C98h
+	cmp	bl,4
+	je	short loc_165		; Jump if equal
+	mov	byte ptr [AMD_cpu_string+12h],2	; ('w')
+	mov	si,1C69h
+	cmp	bl,9
+	je	short loc_165		; Jump if equal
+	jnz	short loc_164		; Jump if not zero
+loc_162:
+	mov	byte ptr [AMD_cpu_string+12h],5	; ('w')
+	mov	si,1C8Bh
+	cmp	bl,0
+	je	short loc_165		; Jump if equal
+	jnz	short loc_164		; Jump if not zero
+loc_163:
+	mov	byte ptr [AMD_cpu_string+12h],7	; ('w')
+	mov	si,1CA6h
+	cmp	bl,4
+	je	short loc_165		; Jump if equal
+	cmp	bl,2
+	jne	short loc_164		; Jump if not equal
+	mov	byte ptr [AMD_cpu_string+12h],3	; ('w')
+	mov	si,1C74h
+	cmp	dword ptr cpu_features,1
+	je	short loc_165		; Jump if equal
+	mov	byte ptr [AMD_cpu_string+12h],4	; ('w')
+	mov	si,1C7Fh
+	cmp	dword ptr cpu_features,105h
+	je	short loc_165		; Jump if equal
+loc_164:
+	mov	byte ptr [AMD_cpu_string+12h],0FFh	; ('w')
+	mov	si,offset DX2_string 
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	stc				; Set carry flag
+	jmp	short loc_166
+loc_165:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	clc				; Clear carry flag
+loc_166:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_amd_2
+;sub_74		proc	near
+	pusha				; Save all regs
+	call	get_cpu_cyrix
+	mov	al,[AMDn_string]
+	mov	byte ptr [AMD_cpu_string+12h],1	; ('w')
+	mov	si,1B54h
+	cmp	al,0
+	je	loc_169			; Jump if equal
+	mov	si,1B61h
+	cmp	al,1
+	je	loc_169			; Jump if equal
+	mov	si,1B6Eh
+	cmp	al,2
+	je	loc_169			; Jump if equal
+	mov	si,1B7Ch
+	cmp	al,3
+	je	loc_169			; Jump if equal
+	mov	si,1B8Ah
+	cmp	al,4
+	je	loc_169			; Jump if equal
+	mov	si,1B97h
+	cmp	al,5
+	je	loc_169			; Jump if equal
+	mov	si,1BA4h
+	cmp	al,6
+	je	loc_169			; Jump if equal
+	mov	si,1BB2h
+	cmp	al,7
+	je	loc_169			; Jump if equal
+	mov	si,1BC0h
+	cmp	al,8
+	je	loc_169			; Jump if equal
+	mov	si,1BCDh
+	cmp	al,9
+	je	loc_169			; Jump if equal
+	mov	si,1BDAh
+	cmp	al,0Ah
+	je	loc_169			; Jump if equal
+	mov	si,1BE8h
+	cmp	al,0Bh
+	je	loc_169			; Jump if equal
+	mov	si,1BF6h
+	cmp	al,10h
+	je	loc_169			; Jump if equal
+	mov	si,1C01h
+	cmp	al,11h
+	je	loc_169			; Jump if equal
+	mov	si,1C0Dh
+	cmp	al,12h
+	je	loc_169			; Jump if equal
+	mov	si,1C19h
+	cmp	al,13h
+	je	loc_169			; Jump if equal
+	mov	si,1C26h
+	cmp	al,1Ah
+	je	loc_169			; Jump if equal
+	mov	si,1C32h
+	cmp	al,1Bh
+	je	loc_169			; Jump if equal
+	mov	si,1C3Fh
+	cmp	al,0FDh
+	je	loc_169			; Jump if equal
+	mov	si,1C50h
+	cmp	al,0FEh
+	je	short loc_169		; Jump if equal
+	mov	si,1C5Ch
+	cmp	al,1Fh
+	je	short loc_169		; Jump if equal
+	mov	byte ptr [AMD_cpu_string+12h],2	; ('w')
+	mov	si,1C69h
+	mov	dl,al
+	sub	dl,28h			; '('
+	cmp	dl,7
+	jbe	short loc_169		; Jump if below or =
+	mov	dl,al
+	sub	dl,30h			; '0'
+	cmp	dl,7
+	jbe	short loc_167		; Jump if below or =
+	mov	byte ptr [AMD_cpu_string+12h],5	; ('w')
+	mov	si,1C8Bh
+	mov	dl,al
+	sub	dl,50h			; 'P'
+	cmp	dl,0Fh
+	jbe	short loc_169		; Jump if below or =
+	mov	dl,al
+	sub	dl,40h			; '@'
+	cmp	dl,7
+	jbe	short loc_168		; Jump if below or =
+	mov	byte ptr [AMD_cpu_string+12h],0FFh	; ('w')
+	mov	si,1B46h
+	jmp	short loc_169
+loc_167:
+	mov	byte ptr [AMD_cpu_string+12h],3	; ('w')
+	mov	si,1C74h
+	cmp	byte ptr [AMDs_string],21h	; '!'
+	jbe	short loc_169		; Jump if below or =
+	mov	byte ptr [AMD_cpu_string+12h],4	; ('w')
+	mov	si,1C7Fh
+	jmp	short loc_169
+loc_168:
+	mov	byte ptr [AMD_cpu_string+12h],6	; ('w')
+	mov	si,1C98h
+	mov	al,data_200
+	and	al,0F0h
+	cmp	al,30h			; '0'
+	jne	short loc_169		; Jump if not equal
+	mov	byte ptr [AMD_cpu_string+12h],7	; ('w')
+	mov	si,offset [IDT_string+20h]	; ('i')
+	jmp	short loc_169
+loc_169:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	initial_cpu_check
+;sub_75		proc	near
+	pusha				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_170		; Jump if not zero
+	call	get_basic_cpuid
+	mov	si,offset cpuid_str+1
+	mov	di,offset AMD_str
+	call	strcmp
+	jz	short loc_171		; Jump if zero
+	jnz	short loc_172		; Jump if not zero
+loc_170:
+	call	is_486sx
+	jnz	short loc_172		; Jump if not zero
+	xor	ax,ax			; Zero register
+	sahf				; Store ah into flags
+	mov	ax,5
+	mov	bx,2
+	div	bl			; al, ah rem = ax/reg
+	lahf				; Load ah from flags
+	cmp	ah,2
+	jne	short loc_172		; Jump if not equal
+loc_171:
+	xor	al,al			; Zero register
+	jmp	short loc_173
+loc_172:
+	xor	al,al			; Zero register
+	inc	al
+loc_173:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	test_cpu_amd
+;sub_76		proc	near
+	push	eax
+	call	is_cpuid_available
+	jnz	short loc_175		; Jump if not zero
+	call	get_extended_cpuid
+	cmp	eax,80000004h
+	jb	short loc_174		; Jump if below
+	call	get_cpu_amd_1
+	call	get_cpu_brandstring2
+	jmp	short loc_176
+loc_174:
+	call	get_basic_cpuid
+	cmp	eax,1
+	jc	short loc_175		; Jump if carry Set
+	call	get_cpu_amd_1
+	jnc	short loc_176		; Jump if carry=0
+loc_175:
+	call	get_cpu_amd_2
+loc_176:
+	pop	eax
+	retn
+ENDP
+
+PROC	test_cpu_amd_cyrix
+;sub_77		proc	near
+	pusha				; Save all regs
+	call	test_cpu_amd
+	cmp	byte ptr [AMD_cpu_string+12h],0FFh	; ('w')
+	je	short loc_181		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],2	; ('w')
+	jb	short loc_181		; Jump if below
+	mov	al,0C3h
+	mov	bl,10h
+	call	get_cyrix_1
+	jc	short loc_181		; Jump if carry Set
+	cmp	byte ptr [AMD_cpu_string+12h],2	; ('w')
+	je	short loc_177		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],3	; ('w')
+	je	short loc_178		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],4	; ('w')
+	je	short loc_178		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],5	; ('w')
+	je	short loc_179		; Jump if equal
+	jmp	short loc_181
+loc_177:
+	mov	al,0E8h
+	mov	bl,80h
+	call	get_cyrix_1
+	jmp	short loc_180
+loc_178:
+	mov	al,0C1h
+	mov	bl,10h
+	call	get_cyrix_1
+	mov	al,0E8h
+	mov	bl,80h
+	call	get_cyrix_1
+	mov	al,0E9h
+	mov	bl,1
+	call	get_cyrix_1
+	jmp	short loc_180
+loc_179:
+	mov	al,0C1h
+	mov	bl,10h
+	call	get_cyrix_1
+	mov	al,0E8h
+	mov	bl,80h
+	call	get_cyrix_1
+	mov	al,0E9h
+	mov	bl,1
+	call	get_cyrix_1
+	jmp	short loc_180
+loc_180:
+	clc				; Clear carry flag
+	jmp	short loc_182
+loc_181:
+	stc				; Set carry flag
+loc_182:
+	mov	al,0C3h
+	mov	bl,10h
+	call	get_cyrix_2
+	popa				; Restore all regs
+	retn
+ENDP	
+
+PROC	test_cpu_amd_2
+;sub_78		proc	near
+	pusha				; Save all regs
+	call	test_cpu_amd
+	cmp	byte ptr [AMD_cpu_string+12h],0FFh	; ('w')
+	je	short loc_184		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],2	; ('w')
+	jb	short loc_184		; Jump if below
+	jz	short loc_183		; Jump if zero
+	cmp	byte ptr [AMD_cpu_string+12h],3	; ('w')
+	je	short loc_183		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],4	; ('w')
+	je	short loc_183		; Jump if equal
+	cmp	byte ptr [AMD_cpu_string+12h],5	; ('w')
+	je	short loc_183		; Jump if equal
+	jmp	short loc_184
+loc_183:
+	mov	al,0C2h
+	mov	bl,8
+	call	get_cyrix_1
+	jc	short loc_184		; Jump if carry Set
+	clc				; Clear carry flag
+	jmp	short loc_185
+loc_184:
+	stc				; Set carry flag
+loc_185:
+	popa				; Restore all regs
+	retn
+ENDP
+
+intel_data	db	00h				;data_208e
+Intel_string	db	'GenuineIntel', 0
+Intelu_string	db	'Unknown Intel', 0
+		db	'Intel 486DX at 25/33 Mhz', 0
+		db	'Intel 486DX at 50 '
+v86_callback 	dd	0				;data_171
+		db	'Intel 486SX'
+		db	0
+		db	'Intel 486DX2'
+		db	0
+		db	'Intel 486SL'
+		db	0
+		db	'Intel 486SX2'
+		db	0
+		db	'Intel 486DX2-WB'
+		db	0
+		db	'Intel 486DX4'
+		db	0
+		db	'Intel 486DX4-WB'
+		db	0
+		db	'Intel Pentium A-Step'
+		db	0
+		db	'Intel Pentium'
+		db	0
+		db	'Intel Pent'
+cpu_bstring1	dd	?			;data_173	
+cpu_bstring2	dd	?                       ;data_174
+cpu_bstring3	dd	?                       ;data_175
+cpu_bstring4	dd	?                       ;data_176
+cpu_bstring5	dd	?                       ;data_177
+cpu_bstring6	dd	?                       ;data_178
+cpu_bstring7	dd	?                       ;data_179
+cpu_bstring8	dd	?                       ;data_180
+cpu_bstring9 	dd	?                       ;data_181
+cpu_bstring10	dd	?                       ;data_182
+cpu_bstring11	dd	?                       ;data_183
+cpu_bstring12	dd	?                       ;data_184
+cpuid_str1	dd	?                     	;data_185
+		db	?			;		' Genu'	
+cpuid_str3	dd	?                       ;data_187       'ntel'		
+cpuid_str2	dd	?                       ;data_188       'inel'		
+cpu_stepping	db	?                   	;data_189
+cpu_family_id	db	?                     	;data_190
+cpu_model	db	?                     	;data_191
+cpu_type    	db	?                     	;data_192
+cpu_features	dd	?               	;data_193
+		db	 20h, 50h, 72h, 6Fh
+highest_basic_cpuid	dd	?       	;data_194
+highest_extended_cpuid 	dd	?		;data_195
+		db	'entium II'
+		db	0
+
+PROC	get_cpu_intel_1
+;sub_79		proc	near
+	pusha				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_187		; Jump if not zero
+	call	get_cpu_intel_2
+	jz	short loc_186		; Jump if zero
+	call	get_basic_cpuid
+	mov	si,offset cpu_string1+1
+	mov	di,Intel_string
+	call	strcmp
+	jnz	short loc_187		; Jump if not zero
+loc_186:
+	xor	al,al			; Zero register
+	jmp	short loc_188
+loc_187:
+	xor	al,al			; Zero register
+	inc	al
+loc_188:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_intel_2
+;sub_80		proc	near
+	push	eax
+	call	get_basic_cpuid
+	cmp	eax,5FFh
+	ja	short loc_189		; Jump if above
+	cmp	eax,500h
+	jb	short loc_189		; Jump if below
+	xor	al,al			; Zero register
+	jmp	short loc_190
+loc_189:
+	xor	al,al			; Zero register
+	inc	al
+loc_190:
+	pop	eax
+	retn
+ENDP
+
+PROC	get_basic_cpu_info_3
+;sub_81		proc	near
+	push	eax bx
+	push	bx
+	call	get_basic_cpuid
+	mov	bx,ax
+	and	al,0Fh
+	mov	cpu_stepping,al
+	mov	al,bl
+	shr	al,4			; Shift w/zeros fill
+	mov	cpu_model,al
+	mov	ah,bh
+	and	ah,0Fh
+	mov	cpu_family_id,ah
+	mov	ah,bh
+	shr	ah,4			; Shift w/zeros fill
+	mov	cpu_type,ah
+	mov	cpu_features,1BFh
+	pop	bx eax
+	retn
+END
+
+;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+;                              SUBROUTINE
+;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+
+PROC	get_basic_cpu_info_2
+;sub_82		proc	near
+	call	get_basic_cpu_info
+	retn
+ENDP
+
+PROC	get_cpu_intel_4
+;sub_83		proc	near
+	pusha				; Save all regs
+	call	get_cpu_intel_2
+	jz	loc_194			; Jump if zero
+	call	get_basic_cpu_info
+	mov	al,[cpu_family_id]
+	mov	bl,[cpu_model]
+	cmp	al,4
+	je	short loc_191		; Jump if equal
+	cmp	al,5
+	je	short loc_192		; Jump if equal
+	cmp	al,6
+	je	loc_193			; Jump if equal
+	jmp	loc_195
+loc_191:
+	mov	byte ptr ds:intel_data,1
+	mov	si,20E5h
+	cmp	bl,0
+	je	loc_196			; Jump if equal
+	mov	si,20FEh
+	cmp	bl,1
+	je	loc_196			; Jump if equal
+	mov	si,2114h
+	cmp	bl,2
+	je	loc_196			; Jump if equal
+	mov	si,2120h
+	cmp	bl,3
+	je	loc_196			; Jump if equal
+	mov	si,212Dh
+	cmp	bl,4
+	je	loc_196			; Jump if equal
+	mov	si,2139h
+	cmp	bl,5
+	je	loc_196			; Jump if equal
+	mov	si,2146h
+	cmp	bl,7
+	je	loc_196			; Jump if equal
+	mov	si,2156h
+	cmp	bl,8
+	je	loc_196			; Jump if equal
+	mov	si,2163h
+	cmp	bl,9
+	je	loc_196			; Jump if equal
+	jnz	short loc_195		; Jump if not zero
+loc_192:
+	mov	byte ptr ds:intel_data,2
+	mov	si,2173h
+	cmp	bl,0
+	je	short loc_196		; Jump if equal
+	mov	si,2188h
+	cmp	bl,1
+	je	short loc_196		; Jump if equal
+	mov	byte ptr ds:intel_data,3
+	mov	si,2196h
+	cmp	bl,3
+	je	short loc_196		; Jump if equal
+	mov	byte ptr ds:intel_data,4
+	mov	si,2188h
+	cmp	bl,2
+	je	short loc_196		; Jump if equal
+	cmp	bl,7
+	je	short loc_196		; Jump if equal
+	mov	byte ptr ds:intel_data,5
+	mov	si,21AEh
+	cmp	bl,4
+	je	short loc_196		; Jump if equal
+	cmp	bl,8
+	je	short loc_196		; Jump if equal
+	jnz	short loc_195		; Jump if not zero
+loc_193:
+	mov	byte ptr ds:intel_data,6
+	mov	si,21C0h
+	cmp	bl,0
+	je	short loc_196		; Jump if equal
+	mov	si,21D9h
+	cmp	bl,1
+	je	short loc_196		; Jump if equal
+	mov	si,21EBh
+	cmp	bl,3
+	je	short loc_196		; Jump if equal
+	cmp	bl,5
+	je	short loc_196		; Jump if equal
+	jnz	short loc_195		; Jump if not zero
+loc_194:
+	mov	byte ptr ds:intel_data,2
+	mov	si,2173h
+	jmp	short loc_196
+loc_195:
+		mov	byte ptr ds:intel_data,0
+	mov	si,data_211e
+	jmp	short loc_196
+loc_196:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_intel_3
+;sub_84		proc	near
+	call	get_cpu_intel_2
+	jnz	short loc_197		; Jump if not zero
+	call	get_basic_cpu_info_3
+	jmp	short loc_ret_198
+loc_197:
+	call	get_basic_cpu_info
+	jmp	short loc_ret_198
+
+loc_ret_198:
+	retn
+ENDP
+
+PROC	get_cpu_intel_5
+;sub_85		proc	near
+	call	get_cpu_intel_4
+	retn
+ENDP
+
+;ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+;                              SUBROUTINE
+;ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+PROC	test_cpu_intel
+;sub_86		proc	near
+	pusha				; Save all regs
+	call	get_cpu_intel_3
+	test	[cpu_features],20h
+	jz	short loc_202		; Jump if zero
+	call	get_cpu_intel_5
+	cmp	byte ptr ds:intel_data,4
+	jb	short loc_202		; Jump if below
+	jz	short loc_199		; Jump if zero
+	cmp	byte ptr ds:intel_data,5
+	je	short loc_200		; Jump if equal
+	jnz	short loc_202		; Jump if not zero
+loc_199:
+	mov	ecx,0Eh
+	rdmsr				; model specific reg
+	and	al,0BFh
+	wrmsr				; model specific reg
+	jmp	short loc_201
+loc_200:
+	mov	ecx,0Eh
+	rdmsr				; model specific reg
+	and	al,0BFh
+	or	eax,200000h
+	wrmsr				; model specific reg
+	jmp	short loc_201
+loc_201:
+	clc				; Clear carry flag
+	jmp	short loc_203
+loc_202:
+	stc				; Set carry flag
+loc_203:
+	popa				; Restore all regs
+	retn
+ENDP
+
+AMD_cpu_string	db	'AuthenticAMD', 0		;data_197
+AMDu_string	db	'Unknow'
+AMDn_string	db	'n'				;data_199
+AMDs_string	db	' '				;data_200	
+AMD_string	db	'AMD', 0			;data_201
+		db	'AMD 486DX'
+DX2_string 	db	'2', 0				;data_202
+		db	'AMD 486DX2-WB', 0
+		db	'AMD 486DX4', 0
+		db	'AMD 486DX4-WB', 0
+		db	'AMD 5x86', 0
+		db	'AMD 5x86-WB', 0
+		db	'AMD K5-SS/A', 0
+		db	'AMD K5', 0
+		db	'AMD K6-MMX', 0
+		db	'AMD K6-3D', 0
+		db	'AMD K6-Plus', 0
+
+PROC get_cpu_amd_3
+;sub_87		proc	near
+	pusha				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_204		; Jump if not zero
+	call	get_basic_cpuid
+	mov	si,offset cpuid_str1+1
+	mov	di,offset AMD_cpu_string
+	call	strcmp
+	jnz	short loc_204		; Jump if not zero
+	xor	al,al			; Zero register
+	jmp	short loc_205
+loc_204:
+	xor	al,al			; Zero register
+	inc	al
+loc_205:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_brandstring_2
+;sub_88		proc	near
+	call	get_cpu_brandstring
+	retn
+ENDP
+
+PROC	get_cpu_amd_4
+sub_89		proc	near
+	pusha				; Save all regs
+	call	get_basic_cpu_info
+	mov	al,[cpu_family_id]	
+	mov	bl,[cpu_model	 ]
+	cmp	al,4
+	je	short loc_206		; Jump if equal
+	cmp	al,5
+	je	short loc_207		; Jump if equal
+	jmp	short loc_208
+loc_206:
+	mov	si,23FDh
+	cmp	bl,3
+	je	short loc_209		; Jump if equal
+	mov	si,2408h
+	cmp	bl,7
+	je	short loc_209		; Jump if equal
+	mov	si,2416h
+	cmp	bl,8
+	je	short loc_209		; Jump if equal
+	mov	si,2421h
+	cmp	bl,9
+	je	short loc_209		; Jump if equal
+	mov	si,242Fh
+	cmp	bl,0Eh
+	je	short loc_209		; Jump if equal
+	mov	si,2438h
+	cmp	bl,0Fh
+	je	short loc_209		; Jump if equal
+	jnz	short loc_208		; Jump if not zero
+loc_207:
+	mov	si,2444h
+	cmp	bl,0
+	je	short loc_209		; Jump if equal
+	mov	si,2450h
+	cmp	bl,1
+	je	short loc_209		; Jump if equal
+	cmp	bl,2
+	je	short loc_209		; Jump if equal
+	cmp	bl,3
+	je	short loc_209		; Jump if equal
+	mov	si,2457h
+	cmp	bl,6
+	je	short loc_209		; Jump if equal
+	cmp	bl,7
+	je	short loc_209		; Jump if equal
+	mov	si,2462h
+	cmp	bl,8
+	je	short loc_209		; Jump if equal
+	mov	si,246Ch
+	cmp	bl,9
+	je	short loc_209		; Jump if equal
+	jnz	short loc_208		; Jump if not zero
+loc_208:
+	mov	si,offset AMDu_string
+	jmp	short loc_209
+loc_209:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_amd_5
+sub_90		proc	near
+	push	eax
+	call	get_extended_cpuid
+	cmp	eax,80000004h
+	jb	short loc_210		; Jump if below
+	call	get_cpu_brandstring_2
+	jmp	short loc_211
+loc_210:
+	call	get_cpu_amd_4
+	jmp	short loc_211
+loc_211:
+	pop	eax
+	retn
+ENDP
+
+PROC	set_clc_1
+;sub_91		proc	near
+	clc				; Clear carry flag
+	retn
+ENDP
+
+Centaur_data	db	? 
+Centaur_string	db	'Ce'
+IDT_string	db	'ntaurHauls', 0		;data_203
+IDTu_string	db	'Unknown IDT', 0
+		db	'IDT WinChip C6', 0
+		db	'IDT WinChip C6-Plus', 0
+
+PROC	get_cpu_Centaur_1
+;sub_92		proc	near
+	pusha				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_213		; Jump if not zero
+	call	get_basic_cpuid
+	mov	si,offset cpu_string1+1
+	mov	di,offset Centaur_string
+	call	strcmp
+	jz	short loc_212		; Jump if zero
+	mov	eax,0C0000000h
+	cpuid				; get ID into ebx
+	cmp	eax,0C0000000h
+	jne	short loc_213		; Jump if not equal
+loc_212:
+	xor	al,al			; Zero register
+	jmp	short loc_214
+loc_213:
+	xor	al,al			; Zero register
+	inc	al
+loc_214:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_basic_cpu_info_4
+;sub_93		proc	near
+	call	get_basic_cpu_info
+	retn
+ENDP
+
+PROC	get_cpu_Centaur_2
+;sub_94		proc	near
+	pusha				; Save all regs
+	call	get_basic_cpu_info
+	mov	al,cpu_family_id	
+	mov	bl,cpu_model	
+	cmp	al,5
+	je	short loc_215		; Jump if equal
+	cmp	al,6
+	je	short loc_216		; Jump if equal
+	jmp	short loc_217
+loc_215:
+	mov	byte ptr ds:Centaur_data,1
+	mov	si,255Dh
+	cmp	bl,4
+	je	short loc_218		; Jump if equal
+	jnz	short loc_217		; Jump if not zero
+loc_216:
+	mov	byte ptr ds:Centaur_data,2
+	mov	si,256Ch
+	jmp	short loc_218
+loc_217:
+	mov	byte ptr ds:Centaur_data,0
+	mov	si,offset IDTu_string
+	jmp	short loc_218
+loc_218:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	set_clc_2
+;sub_95		proc	near
+	clc				; Clear carry flag
+	retn
+ENDP
+
+PROC	test_cpu_Centaur
+;sub_96		proc	near
+	pusha				; Save all regs
+	call	get_basic_cpu_info_4
+	test	cpu_features,20h
+	jz	short loc_220		; Jump if zero
+	call	test_cpu_Centaur_2
+	cmp	byte ptr ds:Centaur_data,1
+	je	short loc_219		; Jump if equal
+	jnz	short loc_220		; Jump if not zero
+loc_219:
+	mov	ecx,0Eh
+	rdmsr				; model specific reg
+	or	al,40h			; '@'
+	wrmsr				; model specific reg
+	jmp	short $+2		; delay for I/O
+	clc				; Clear carry flag
+	jmp	short loc_221
+loc_220:
+	stc				; Set carry flag
+loc_221:
+	popa				; Restore all regs
+	retn
+ENDP
+
+Nexgen_string	db	'NexGenDriven', 0
+		db	'Unknown NexGen', 0
+		db	'NexGen Nx586', 0
+		db	'NexGen Nx586 with Nx587', 0
+Nexgen4_string	db	'NexGen Nx686', 0
+
+PROC	get_cpu_nexgen_1
+;sub_97		proc	near
+	pusha				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_222		; Jump if not zero
+	call	get_basic_cpuid
+	mov	si,offset cpuid_str1+1
+	mov	di, offset Nexgen_string
+	call	strcmp
+	jz	short loc_223		; Jump if zero
+	jnz	short loc_224		; Jump if not zero
+loc_222:
+	call	is_486sx
+	jz	short loc_224		; Jump if zero
+	mov	ax,5555h
+	xor	dx,dx			; Zero register
+	mov	cx,2
+	div	cx			; ax,dx rem=dx:ax/reg
+	jnz	short loc_224		; Jump if not zero
+loc_223:
+	xor	al,al			; Zero register
+	jmp	short loc_225
+loc_224:
+	xor	al,al			; Zero register
+	inc	al
+loc_225:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_nexgen_2
+;sub_98		proc	near
+	pushad				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_226		; Jump if not zero
+	call	get_basic_cpuid
+	cmp	eax,1
+	jc	short loc_226		; Jump if carry Set
+	call	get_basic_cpu_info
+	cmp	[cpu_family_id],5
+	je	short loc_226		; Jump if equal
+	cmp	[cpu_family_id],6
+	je	short loc_227		; Jump if equal
+	mov	si,2630h
+	jmp	short loc_228
+loc_226:
+	mov	si,263Fh
+	call	test_fpu
+	cmp	ah,0
+	je	short loc_228		; Jump if equal
+	mov	si,264Ch
+	jmp	short loc_228
+loc_227:
+	mov	si,offset Nexgen4_string
+	jmp	short loc_228
+loc_228:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popad				; Restore all regs
+	retn
+ENDP
+		db	'UMC UMC UMC ', 0
+UMCu_string	db	'Unknown UMC', 0
+		db	'UMC U5D', 0
+		db	'UMC U5S', 0
+
+PROC	get_cpu_intel_6
+;sub_99		proc	near
+	pusha				; Save all regs
+	call	is_cpuid_available
+	jnz	short loc_230		; Jump if not zero
+	call	get_basic_cpuid
+	mov	si,offset cpu_str1+1
+	mov	di,offset Itelu_string
+	call	strcmp
+	jz	short loc_229		; Jump if zero
+	jnz	short loc_230		; Jump if not zero
+loc_229:
+	xor	al,al			; Zero register
+	jmp	short loc_231
+loc_230:
+	xor	al,al			; Zero register
+	inc	al
+loc_231:
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	get_cpu_umc
+;sub_100		proc	near
+	pusha				; Save all regs
+	call	get_basic_cpu_info
+	mov	al,[cpu_family_id]	
+	mov	bl,[cpu_model]	
+	cmp	al,4
+	je	short loc_232		; Jump if equal
+	jmp	short loc_234
+loc_232:
+	cmp	bl,1
+	jne	short loc_233		; Jump if not equal
+	mov	si,26FFh
+	jmp	short loc_235
+loc_233:
+	cmp	bl,2
+	jne	short loc_234		; Jump if not equal
+	mov	si,2707h
+	jmp	short loc_235
+loc_234:
+	mov	si, UMCu_string
+	jmp	short loc_235
+loc_235:
+	mov	di,offset cpu_bstring1
+	call	strcpy
+	popa				; Restore all regs
+	retn
+ENDP
+
+PROC	CPU_GETNAME
+;sub_101		proc	near
+	push	ax es
+	mov	ax,cs
+	mov	es,ax
+	call	get_cpu_intel_1
+	jz	short loc_236		; Jump if zero
+	call	get_cpu_amd_3
+	jz	short loc_237		; Jump if zero
+	call	initial_cpu_check
+	jz	short loc_238		; Jump if zero
+	call	get_cpu_Centaur_1
+	jz	short loc_239		; Jump if zero
+	call	get_cpu_nexgen
+	jz	short loc_240		; Jump if zero
+	call	get_cpu_intel_6
+	jz	short loc_241		; Jump if zero
+	call	get_cpus			;*
+	jz	short loc_242		; Jump if zero
+	jmp	short loc_244
+loc_236:
+	call	get_cpu_intel_5
+	jmp	short loc_243
+loc_237:
+	call	get_cpu_amd_5
+	jmp	short loc_243
+loc_238:
+	call	test_cpu_amd
+	jmp	short loc_243
+loc_239:
+	call	get_cpu_Centaur_2
+	jmp	short loc_243
+loc_240:
+	call	get_cpu_nexgen_2
+	jmp	short loc_243
+loc_241:
+	call	UMCu_string
+	jmp	short loc_243
+loc_242:
+	call	sget_cpu_early_model
+	jmp	short loc_243
+loc_243:
+	clc				; Clear carry flag
+	mov	si,18E0h
+	jmp	short loc_245
+loc_244:
+	stc				; Set carry flag
+	mov	si,1932h
+loc_245:
+	pop	es ax
+	retn
+ENDP
+
+
+PROC	CPU_OPTIMIZE
+;sub_102		proc	near
+	jmp	short loc_246
+in_v86_call	db	0
+loc_246:
+	push	ax es
+	cli				; Disable interrupts
+	mov	ax,cs
+	mov	es,ax
+	call	TEST_V86
+	jnz	short loc_247		; Jump if not zero
+	call	TEST_DPMI
+	jz	short loc_252		; Jump if zero
+	call	WIN386_V86_CALLBACK_INIT
+	jc	short loc_252		; Jump if carry Set
+	mov	byte ptr ds:in_v86_call,1
+loc_247:
+	call	initial_cpu_check
+	jz	short loc_248		; Jump if zero
+	call	get_cpu_amd_3
+	jz	short loc_249		; Jump if zero
+	call	get_cpu_Centaur_1
+	jz	short loc_250		; Jump if zero
+	jmp	short loc_252
+loc_248:
+	call	test_cpu_amd_cyrix
+	jc	short loc_252		; Jump if carry Set
+	jnc	short loc_251		; Jump if carry=0
+loc_249:
+	call	set_clc_1
+	jc	short loc_252		; Jump if carry Set
+	jnc	short loc_251		; Jump if carry=0
+loc_250:
+	call	set_clc_2
+	jc	short loc_252		; Jump if carry Set
+	jnc	short loc_251		; Jump if carry=0
+loc_251:
+	clc				; Clear carry flag
+	jmp	short loc_253
+loc_252:
+	stc				; Set carry flag
+loc_253:
+	pushf				; Push flags
+	cmp	byte ptr ds:in_v86_call,1
+	jne	short loc_254		; Jump if not equal
+	call	WIN386_V86_CALLBACK_EXIT
+	mov	byte ptr ds:in_v86_call,0
+loc_254:
+	popf				; Pop flags
+	pop	es ax
+	retn
+ENDP
+
+PROC	CPU_POWERSAVE
+;sub_103		proc	near
+	jmp	loc_255	
+	in_v86_call2	db	00h
+loc_255:
+	push	ax es
+	push	es
+	cli				; Disable interrupts
+	mov	ax,cs
+	mov	es,ax
+	call	TEST_V86
+	jnz	short loc_256		; Jump if not zero
+	call	TEST_DPMI
+	jz	short loc_261		; Jump if zero
+	call	WIN386_V86_CALLBACK_INIT
+	jc	short loc_261		; Jump if carry Set
+	mov	[byte ptr ds:in_v86_call2],1		
+loc_256:
+	call	get_cpu_intel_1
+	jz	short loc_257		; Jump if zero
+	call	initial_cpu_check
+	jz	short loc_258		; Jump if zero
+	call	get_cpu_centaur
+	jz	short loc_259		; Jump if zero
+	jmp	short loc_261
+loc_257:
+	call	test_cpu_intel
+	jc	short loc_261		; Jump if carry Set
+	jnc	short loc_260		; Jump if carry=0
+loc_258:
+	call	test_cpu_amd_2
+	jc	short loc_261		; Jump if carry Set
+	jnc	short loc_260		; Jump if carry=0
+loc_259:
+	call	test_cpu_Centaur
+	jc	short loc_261		; Jump if carry Set
+	jnc	short loc_260		; Jump if carry=0
+loc_260:
+	clc				; Clear carry flag
+	jmp	short loc_262
+loc_261:
+	stc				; Set carry flag
+loc_262:
+	pushf				; Push flags
+	cmp	[byte ptr ds:in_v86_call2],1
+	jne	short loc_263		; Jump if not equal
+	call	WIN386_V86_CALLBACK_EXIT
+	mov	[byte ptr ds:in_v86_call2],0
+loc_263:
+	popf				; Pop flags
+	pop	es ax
+	retn
+ENDP
 
 ENDS
