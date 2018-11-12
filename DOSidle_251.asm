@@ -22,9 +22,22 @@
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°±±±±±±±±±± GLOBAL CODE & DATA FOR ALL HANDLERS ±±±±±±±±±±°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-.186
+.386
 ideal                                   ; Yep, this prog is TASM 4.0 coded!
-MODEL	LARGE
+
+SEGMENT	CODE16	PARA PUBLIC 'CODE'
+ENDS
+
+SEGMENT	DATA16	DWORD PUBLIC 'DATA'
+ENDS
+
+SEGMENT	MYSTACK	PARA STACK 'STACK'
+ENDS
+
+GROUP	DGROUP	DATA16, MYSTACK
+ENDS
+
+
 include "_stddata.ah"
 include "_tsrres.ah"
 include "_dcon.ah"
@@ -72,8 +85,8 @@ INT_XXH_FORCE   = 300                   ; # of calls to FN before forced HLT.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA	RESIDENTDATA 
-
+;DATASEG	;RESIDENTDATA 
+SEGMENT	DATA16
 Align 4
 int_xxh_fcount  dw 0                    ;  # int xxh FN(x) called repeatedly.
 
@@ -94,8 +107,10 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-	assume ds:RESIDENTDATA 
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
+;	assume ds:DATA 
 
 Proc    _str_cmp                        ; NOTE: Copied from _string.h!!
         push ax cx si di
@@ -154,7 +169,7 @@ Proc    int_xxh_forcehlt
                                         ; int 14h, 16h, 21h and 2Fh handlers.
         mov ax,5305h                    ;
         pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
         
         pop ax 
         ret
@@ -164,7 +179,7 @@ Proc    int_xxh_forcehlt
 @@apm2: and [irq_flags],not IRQ_00      ; Clear IRQ0 occurred flag.
         mov ax,5305h                    ;
         pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
 
         cmp [irq_flags],IRQ_00          ; Was it IRQ0 (timer) ONLY?!
         je @@apm2                       ; Yes, go back HLTing.
@@ -200,8 +215,8 @@ INT_21H_TOPFN   = 4ch                   ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA RESIDENTDATA 
-
+;DATASEG ;RESIDENTDATA 
+SEGMENT	DATA16
 Align 4
 old_int_21h     rmdw <0, 0>
 
@@ -230,8 +245,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_21h_fn06h                   ; DOS FN: Console I/O.
         cmp dl,0ffh                     ; "Keypressed?" function requested?
         jne short @@done                ; No.
@@ -395,7 +411,7 @@ Proc    int_21h_normalhlt
 
 @@apml: mov ax,5305h                    ;
         pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
 
         mov ah,0bh                      ; Int 21h FN: "Keypressed?"
         pushf                           ;
@@ -447,8 +463,8 @@ INT_16H_TOPFN   = 12h                   ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA RESIDENTDATA
-
+;DATASEG ;RESIDENTDATA
+SEGMENT	DATA16
 Align 4
 old_int_16h     rmdw <0, 0>
 
@@ -466,8 +482,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_16h_normalhlt
         push bx                         ; Safety only - BX already saved in the main Int-16 handler
 
@@ -493,7 +510,7 @@ Proc    int_16h_normalhlt
 
         mov ax,5305h                    ;
         pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
 
         mov ah,bh                       ; Restore saved AH (FN number).
         jmp @@apml                      ; No, continue HLTing.
@@ -543,8 +560,8 @@ INT_2FH_TOPFN   = 0ffffh                ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA RESIDENTDATA
-
+;DATASEG ;RESIDENTDATA
+SEGMENT	DATA16
 Align 4
 old_int_2fh     rmdw <0, 0>
 
@@ -554,8 +571,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Align 16
 Proc    int_2fh_handler
         push ax dx ds                   ; (AX might be clobbered in int_xxh_forcehlt)
@@ -588,13 +606,13 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA RESIDENTDATA
-
+;DATASEG ;RESIDENTDATA
+SEGMENT	DATA16
 Align 4
 old_int_33h         rmdw <0, 0>
-user_mouse_handler  rmdw <dummy_mouse_handler, @CODE16>
+user_mouse_handler  rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
 user_mouse_mask     dw 0
-dummy_handler_ptr   rmdw <dummy_mouse_handler, @CODE16>
+dummy_handler_ptr   rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
 
 ENDS
 
@@ -602,8 +620,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Align 16
 Proc    int_33h_handler
         sti                                ; (let 'em run!)
@@ -689,7 +708,7 @@ Proc	install_mouse_handler
 
         ; Install our real mouse handler
 
-        mov dx,@CODE16
+        mov dx,SEG mouse_handler
         mov es,dx
         mov dx,offset mouse_handler
         mov cx,7Fh						; Catch all mouse events
@@ -736,8 +755,8 @@ INT_14H_TOPFN   = 03h                   ; Highest FN that is handled.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA	RESIDENTDATA
-
+;DATASEG	;RESIDENTDATA
+SEGMENT	DATA16
 Align 4
 old_int_14h     rmdw <0, 0>
 
@@ -752,8 +771,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_14h_normalhlt
 	sti                             ; Enable IRQs for following HLT.
 
@@ -771,7 +791,7 @@ Proc    int_14h_normalhlt
 
 @@apml: mov ax,5305h                    ;
         pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+        call [dword CS:old_int_15h]        ; Call APM FN to put the CPU idle.
 
         mov ah,03h                      ; Int 14h FN: Get serial port status.
         pushf                           ;
@@ -817,8 +837,8 @@ ENDS
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 1xH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-FARDATA	RESIDENTDATA
-
+;DATASEG	;RESIDENTDATA
+SEGMENT	DATA16
 Align 4
 old_int_10h     rmdw <0, 0>             ;
 old_int_15h     rmdw <0, 0>             ; Original vector values.
@@ -829,8 +849,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    int_10h_handler                 ; BIOS video functions handler.
         mov [cs:int_xxh_fcount],0       ; Zero int xxh force counter.
         jmp [dword cs:old_int_10h]      ; Chain to old interrupt handler.
@@ -857,15 +878,15 @@ ENDS
 ;°°°°°°°°°°°°°°°°±±±±±±±±±±±±±±± IRQ HANDLERS ±±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-FARDATA	RESIDENTDATA
-
+;DATASEG	;RESIDENTDATA
+SEGMENT	DATA16
 Align 4
 old_masterirqs  rmdw 8 dup (<0, 0>)     ; Original handlers of the hooked IRQs.
 
-new_masterirqs  rmdw <irq_00_handler, @CODE16>, <irq_01_handler, @CODE16>
-                rmdw <irq_02_handler, @CODE16>, <irq_03_handler, @CODE16>
-                rmdw <irq_04_handler, @CODE16>, <irq_05_handler, @CODE16>
-                rmdw <irq_06_handler, @CODE16>, <irq_07_handler, @CODE16>
+new_masterirqs  rmdw <OFFSET irq_00_handler, SEG irq_00_handler>, <OFFSET irq_01_handler, SEG irq_01_handler>
+                rmdw <OFFSET irq_02_handler, SEG irq_02_handler>, <OFFSET irq_03_handler, SEG irq_03_handler>
+                rmdw <OFFSET irq_04_handler, SEG irq_04_handler>, <OFFSET irq_05_handler, SEG irq_05_handler>
+                rmdw <OFFSET irq_06_handler, SEG irq_06_handler>, <OFFSET irq_07_handler, SEG irq_07_handler>
 
 ENDS
 
@@ -873,8 +894,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG RESIDENTCODE
-
+;CODESEG ;RESIDENTCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Align 16
 Proc    irq_00_handler                  ; Handler for IRQ 0 (timer).
         or [cs:irq_flags],IRQ_00        ; Mark that IRQ 0 occurred.
@@ -959,6 +981,8 @@ Proc    irq_07_handler                  ; Handler for IRQ 7.
         jmp [dword cs:old_masterirqs + 28] ; Chain to old interrupt handler.
 Endp
 
+RESIDENT_END:
+
 ENDS
 
 
@@ -987,12 +1011,16 @@ KERNEL_ID     equ 0deedh                ; ID number of this program.
 SYS_RAW         = 01h                   ;
 SYS_VCPI        = 02h                   ; Flags for PM hosts driving the
 SYS_DPMI        = 04h                   ; system.
-
+OFF		= 00h
+ON		= 01h
+CR		= 13
+LF		= 10
+NL		equ <CR,LF>
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-STACK 
+SEGMENT	MYSTACK 
         db 2000 dup (?)                 ; Stack for initialization part.
 ENDS
 
@@ -1000,31 +1028,46 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-FARDATA	INITIALIZATIONDATA
-
+;DATASEG	;INITIALIZATIONDATA
+SEGMENT	DATA16
 psp_seg         dw 0
 env_seg         dw 0
-
+                     
 dos_version     dw 0                    ; MS-DOS version.
 apm_version     dw 0                    ; Advanced Power Management version.
 apm_state       db OFF                  ; State of APM (enabled, disabled).
-
+                    
 sys_type        db SYS_RAW              ; Type of system (Raw, VCPI, DPMI).
 
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
+;struc	par_item
+;	parrm		db 9 dup (0)
+;	proc_off	db 4 dup (0)		
+;ends
 
-par_table       par_item <"-H", par_help>
-                par_item <"-?", par_help>
-                par_item <"-U", par_uninst>
-                par_item <"-ON", par_on>
-                par_item <"-OFF", par_off>
-                par_item <"-CPU", par_cpu>
-                par_item <"-HLT", par_hlt>
-                par_item <"-APM", par_apm>
-                par_item <"-FM0", par_noforce>
-                par_item <"-FM1", par_weakforce>
-                par_item <"-FM2", par_strongforce>
-		par_item <0>            ; Marks end of par_table.
+MACRO	par_item param,proc_offset:=<0>
+	DB	&param
+	psize	SIZESTR <param>
+	psize = 13 - psize
+	rept	psize
+	db	0
+	endm
+	dw 	proc_offset
+ENDM
+
+label	par_table	byte       
+		par_item "-H",   par_help		;par_item <"-H", par_help>                         		
+                par_item "-?",   par_help              	;par_item <"-?", par_help>                         
+                par_item "-U",   par_uninst            	;par_item <"-U", par_uninst>                       
+                par_item "-ON",  par_on                	;par_item <"-ON", par_on>                          
+                par_item "-OFF", par_off              	;par_item <"-OFF", par_off>                        
+                par_item "-CPU", par_cpu              	;par_item <"-CPU", par_cpu>                        
+                par_item "-HLT", par_hlt              	;par_item <"-HLT", par_hlt>                        
+                par_item "-APM", par_apm              	;par_item <"-APM", par_apm>                        
+                par_item "-FM0", par_noforce          	;par_item <"-FM0", par_noforce>                    
+                par_item "-FM1", par_weakforce        	;par_item <"-FM1", par_weakforce>                  
+                par_item "-FM2", par_strongforce      	;par_item <"-FM2", par_strongforce>                
+		par_item ""                            	;par_item <0>            		; Marks end of par_table. ar_table.
 
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
@@ -1094,8 +1137,9 @@ ENDS
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 
-CODESEG	INITIALIZATIONCODE
-
+;CODESEG	;INITIALIZATIONCODE
+SEGMENT	CODE16
+ASSUME	CS:CODE16, DS:DGROUP, ES:DGROUP
 Proc    error_exit                      ; Exits with error message.
 	push si
 	lea si,[err_str]                ;
@@ -1438,7 +1482,7 @@ Proc    hook_ints
         ;-  -  -  -  -  -  -  -  -  -  -;
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-        mov ax,@CODE16                  ;
+        mov ax,SEG int_10h_handler                  ;
         shl eax,16                      ; High WORD of EAX = CODE16.
 
         mov bl,10h                      ; BL = int number of video handler.
@@ -1468,14 +1512,14 @@ Proc    hook_ints
         test [mode_flags],MODE_MOUSE    ; Register mouse handler?
         jz short @@done
 
-        mov ax,@CODE16
+        mov ax,SEG mouse_handler
         mov es,ax
         mov dx,offset mouse_handler
         mov cx,7Fh						; Try to catch all mouse events
         mov ax,0014h
         int 33h
 
-        mov ax,@CODE16                  ;
+        mov ax,SEG int_33h_handler                 ;
         shl eax,16                      ; High WORD of EAX = CODE16.		
         mov bl,33h                      ; BL = int # of Mouse handler.
         mov ax,offset int_33h_handler   ; EAX = new handler for int 33h.
@@ -1700,7 +1744,7 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 
-        mov cx,RESIDENT_END             ;
+        mov cx,OFFSET RESIDENT_END             ;
 	mov dx,KERNEL_ID                ;
 	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
