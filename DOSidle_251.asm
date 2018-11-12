@@ -27,9 +27,6 @@ PAGE  59,132
 ideal                                   ; Yep, this prog is TASM 4.0 coded!
 
 SAMESIZE = 1
-IFDEF	SAMESIZE
-WRONG_RESIDENT = 1
-ENDIF
 
 SEGMENT	CODE16	PARA PUBLIC  USE16 'CODE'
 	ASSUME CS: CODE16, DS:NOTHING, SS:STACK16
@@ -1227,12 +1224,7 @@ PROC	tsr_install
 	mov	ax,[tsr_env_seg]
 	call	mem_lrelease
 	mov	dx,cx
-IFDEF	WRONG_RESIDENT
 	sub	dx,bx
-ELSE
-	nop
-	nop
-ENDIF
 	mov	ax,3100h
 	int	21h				; DOS Services  ah=function 31h
 	ret
@@ -1970,14 +1962,9 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 
-IFDEF	WRONG_RESIDENT
 RESIDENT_SIZE = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
 RESIDENT_END  = (SEG RESIDENT_STOP ) + RESIDENT_SIZE
 	mov cx,RESIDENT_END
-ELSE
-RESIDENT_SIZE  = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
-        mov cx,RESIDENT_SIZE
-ENDIF
 	mov dx,KERNEL_ID                ;
 	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
