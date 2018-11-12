@@ -1,14 +1,11 @@
 
 PAGE  59,132
+OPTION SEGMENT:USE16
 
 .586p
 
-PSP_envirn_seg	equ	2Ch
-
-;------------------------------------------------------------  seg_a   ----
-
 seg_a		segment	byte public use16 'code'
-		assume cs:seg_a  , ds:seg_a , ss:stack_seg_b
+		assume cs:seg_a, ds:seg_a, ss:stack_seg_b
 
 mem_lallocate	proc near			               
 	push	bx
@@ -80,6 +77,7 @@ INTR_14H_BIOS		= 14h * 4
 INTR_16H_BIOS		= 16h * 4
 INTR_21H_BIOS		= 21h * 4
 INTR_2DH_BIOS		= 2dh * 4
+PSP_envirn_seg		= 2Ch
 
 tsr_kernel_id	dw	0                                       
 tsr_psp_seg	dw	0                                       
@@ -98,10 +96,10 @@ ACTION_SUSPEND         	= 2
 ACTION_REACTIVATE	= 3
 
 isr_2dh	proc	far
-	cmp	dx, tsr_kernel_id	;		db	 2Eh, 3Bh, 16h, 31h, 00h, 74h 
+	cmp	dx, cs:tsr_kernel_id	;		db	 2Eh, 3Bh, 16h, 31h, 00h, 74h 
 	jz	short loc_1                   ;		db	 05h                          
 loc_2:
-	jmp	dword ptr old_int_2dh
+	jmp	dword ptr cs:old_int_2dh
 loc_1:			                        
 	cmp	bx,ACTION_TEST
 	jne	short loc_3		; Jump if not equal
@@ -110,7 +108,7 @@ loc_1:
 	iret				; Interrupt return
 loc_3:
 	cmp	bx,ACTION_UNINSTALL
-	jne	loc_10		; Jump if not equal
+	jne	short loc_10		; Jump if not equal
 	cli				; Disable interrupts
 	push	cx
 	push	si
@@ -122,7 +120,7 @@ loc_3:
 	xor	ax,ax			; Zero register
 	mov	es,ax
 	mov	eax,new_int_2dh
-	cmp	es:INTR_2DH_BIOS,eax
+	cmp	es:[INTR_2DH_BIOS],eax
 	jne	short loc_8		; Jump if not equal
 	mov	si,offset intr_vectors
 	mov	cx,vectors_hooked
@@ -928,11 +926,7 @@ tsr_install	proc	near
 	ret
 tsr_install		endp
 
-
-KERNEL_NAME   equ "CPUidle for DOS"     ; Name of the kernel.
-KERNEL_FILE   equ "DOSidle"             ; Name of the .exe (compiled) kernel.
 KERNEL_ID     equ 0DEEDh                ; ID number of this program.
-
 SYS_RAW         = 01h                   ;
 SYS_VCPI        = 02h                   ; Flags for PM hosts driving the
 SYS_DPMI        = 04h                   ; system.
@@ -2242,17 +2236,20 @@ par_table	par_item <"/H", par_help>
 ;	       	par_item <0>            		; Marks end of par_table. ar_table.
  		db size par_item dup(0)
 
-msg_proginfo	db	'CPUIdle for DOS V1.32 [Beta]', 0Dh, 0Ah
+KERNEL_NAME   equ "CPUidle for DOS"     ; Name of the kernel.
+KERNEL_FILE   equ "DOSidle"             ; Name of the .exe (compiled) kernel.
+
+msg_proginfo	db	KERNEL_NAME,' V1.32 [Beta]', 0Dh, 0Ah
 		db	'Copyright (C) by Marton Balog, 1998.', 0Dh, 0Ah, 0
-msg_progsyntax	db	'Syntax:    DOSIDLE [Options]', 0Dh, 0Ah, 0Dh, 0Ah
+msg_progsyntax	db	'Syntax:    ', KERNEL_FILE,' [Options]', 0Dh, 0Ah, 0Dh, 0Ah
 		db	'Options:   /U      Uninstall CPUIdle for DOS.', 0Dh, 0Ah
 		db	'           /TM     Enable Test Mode (disabled by default).', 0Dh, 0Ah
 		db	'           /NF     Disable Force Mode (enabled by default).', 0Dh, 0Ah
 		db	'           /H, /?  Display this help message.', 0Dh, 0Ah, 0
-msg_progexample	db	'Example:   DOSIDLE     Install CPUIdle for DOS.', 0Dh, 0Ah
-		db	'           DOSIDLE /U  Uninstall CPUIdle for DOS.', 0Dh, 0Ah, 0
-msg_inst	db	'CPUIdle for DOS installed successfully.', 00h
-msg_uninst	db	'CPUIdle for DOS uninstalled successfully.', 0
+msg_progexample	db	'Example:   ', KERNEL_FILE,'     Install CPUIdle for DOS.', 0Dh, 0Ah
+		db	'           ', KERNEL_FILE,' /U  Uninstall CPUIdle for DOS.', 0Dh, 0Ah, 0
+msg_inst	db	KERNEL_NAME,' installed successfully.', 00h
+msg_uninst	db	KERNEL_NAME,' uninstalled successfully.', 0
 warn_VCPI	db	'WARNING: VCPI host detected.', 0
 warn_DPMI	db	'WARNING: DPMI host detected.', 0
 
@@ -2459,8 +2456,6 @@ main	proc	far
 main	endp
 
 seg_a	ends
-
-;------------------------------------------------------  stack_seg_b   ----
 
 stack_seg_b	segment	word stack 'STACK' use16
 		db	800 dup (?)
