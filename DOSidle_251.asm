@@ -26,7 +26,9 @@ PAGE  59,132
 .586p
 ideal                                   ; Yep, this prog is TASM 4.0 coded!
 
-SEGMENT	CODE_R	PARA PUBLIC  USE16 'CODE'
+SEGMENT	CODE_R	PARA PUBLIC  USE16 'RESIDENT'
+ENDS 
+SEGMENT	CODE_E	PARA PUBLIC  USE16 'ENDRESIDENT'
 ENDS 
 SEGMENT	CODE16	PARA PUBLIC  USE16 'CODE'
 ENDS
@@ -1970,13 +1972,12 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 	mov di,[mode_flags]		;
-        mov cx,offset RESIDENT_END
-	add cx, 0fh                     ;
-	shr cx, 4                       ; resident part in paragraphs
-	mov bx,[psp_seg]                ; add PSP
-	mov ax,cs                       ;    ,,
-	sub ax,bx                       ;    ,,
-	add cx,ax			;    ,,
+        mov cx,cs			;///
+        mov cx,CODE_E                  	;///
+;	mov bx,[psp_seg]                ; add PSP
+	mov ah,62h
+	int 21h
+	sub cx,bx                       ;    ,,
 	mov dx,KERNEL_ID                ;    
 	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
