@@ -1695,31 +1695,27 @@ Proc    check_system
 Endp
 
 Proc    hook_ints
-	push ds
-	mov ax,fs
-	mov ds,ax			; DS = CODE_R
         ;-  -  -  -  -  -  -  -  -  -  -;
-	ASSUME	DS:CODE_R
         mov eax,[gs:(10h * 4)]          ;
-        mov [old_int_10h],eax     ; Get and save original int 10h.
+        mov [fs:old_int_10h],eax     ; Get and save original int 10h.
 
         mov eax,[gs:(15h * 4)]          ;
-        mov [old_int_15h],eax     ; Get and save original int 15h.
+        mov [fs:old_int_15h],eax     ; Get and save original int 15h.
 
         mov eax,[gs:(14h * 4)]          ;
-        mov [old_int_14h],eax     ; Get and save original int 14h.
+        mov [fs:old_int_14h],eax     ; Get and save original int 14h.
 
         mov eax,[gs:(16h * 4)]          ;
-	mov [old_int_16h],eax     ; Get and save original int 16h.
+	mov [fs:old_int_16h],eax     ; Get and save original int 16h.
 
 	mov eax,[gs:(21h * 4)]          ;
-	mov [old_int_21h],eax     ; Get and save original int 21h.
+	mov [fs:old_int_21h],eax     ; Get and save original int 21h.
 
         mov eax,[gs:(2fh * 4)]          ;
-        mov [old_int_2fh],eax     ; Get and save original int 2fh.
+        mov [fs:old_int_2fh],eax     ; Get and save original int 2fh.
 		
         mov eax,[gs:(33h * 4)]          ;
-        mov [old_int_33h],eax     ; Get and save original int 33h.
+        mov [fs:old_int_33h],eax     ; Get and save original int 33h.
         ;-  -  -  -  -  -  -  -  -  -  -;
 
         ;-  -  -  -  -  -  -  -  -  -  -;
@@ -1749,17 +1745,12 @@ Proc    hook_ints
         mov bl,2fh                      ; BL = int # of DOS Multiplex handler.
         mov ax,offset int_2fh_handler   ; EAX = new handler for int 2fh.
         call tsr_hookint                ; Hook int 2fh.
-	ASSUME	DS:DATA16
-	pop ds
 		
         test [mode_flags],MODE_MOUSE    ; Register mouse handler?
         jz short @@done
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-	ASSUME	DS:CODE_R
-	push ds
         mov ax,fs
-	mov ds,ax                       ; DS = CODE_R
         mov es,ax
         mov dx,offset mouse_handler
         mov cx,7Fh			; Try to catch all mouse events
@@ -1772,8 +1763,6 @@ Proc    hook_ints
         mov ax,offset int_33h_handler   ; EAX = new handler for int 33h.
         call tsr_hookint                ; Hook int 33h.		
 
-	ASSUME	DS:DATA16
-	pop ds
         ;-  -  -  -  -  -  -  -  -  -  -;
 @@done:		
         ret
@@ -1800,22 +1789,16 @@ Proc    hook_irqs
 @@hook: movzx ebx,bl                    ; EBX = base int # for master PIC.
         mov cx,8                        ; CX = number of IRQ in master PIC.
         xor di,di                       ; DI = index to irq arrays.
-	ASSUME	DS:CODE_R
-	push ds
-        mov ax,fs
-        mov ds,ax
 @@mstr: 
 	mov eax,[gs:(ebx * 4)]               ;
-        mov [old_masterirqs + di],eax  ; Get and save old IRQ handler.
-        mov eax,[new_masterirqs + di]  	; Get new handler of IRQ.
+        mov [fs:old_masterirqs + di],eax  ; Get and save old IRQ handler.
+        mov eax,[fs:new_masterirqs + di]  	; Get new handler of IRQ.
 	
         call tsr_hookint                ; Hook IRQ.
         inc bl                          ; BL = next interrupt # for IRQ.
         add di,4                        ; DI = next IRQ number.
         loop @@mstr
         ;-  -  -  -  -  -  -  -  -  -  -;
-	ASSUME	DS:DATA16
-	pop ds
 @@done: ret
 Endp
 
