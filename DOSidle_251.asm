@@ -264,38 +264,11 @@ macro	ds_iret
 endm
 
 PROC	int_2dh_test       
-
+	mov	ax, TSR_ID
+	ret
 ENDP
 
 PROC	int_2dh_uninstall  
-
-ENDP
-
-PROC	int_2dh_suspend    
-
-ENDP
-
-PROC	int_2dh_reactivate 
-
-ENDP
-
-ALIGN	4
-	
-PROC	isr_2dh
-	ds_entry
-	cmp	dx, [tsr_kernel_id]
-	jz	short loc_1
-loc_2:
-	ds_jmp	old_int_2dh
-loc_1:			                        
-	cmp	bx, ACTION_TEST
-	jne	short loc_3		
-	mov	ax, TSR_ID
-	sti				
-	ds_iret					; Interrupt return
-loc_3:
-	cmp	bx, ACTION_UNINSTALL
-	jne	loc_10		
 	cli				
 	push	cx si di es
 	xor	ax,ax			
@@ -346,12 +319,10 @@ loc_8:
 	xor	ax,ax			
 loc_9:
 	pop	es di si cx
-	sti				
-	ds_iret					; Interrupt return
+	ret
+ENDP
 
-loc_10:
-	cmp	bx, ACTION_SUSPEND
-	jne	short loc_15		
+PROC	int_2dh_suspend    
 	cli				
 	push	ebx cx si di es
 	cmp	[vectors_suspend],0
@@ -386,12 +357,10 @@ loc_13:
 	xor	ax,ax			
 loc_14:
 	pop	es di si cx ebx
-	sti				
-	ds_iret					; Interrupt return
+	ret
+ENDP
 
-loc_15:
-	cmp	bx, ACTION_REACTIVATE
-	jne	loc_2			
+PROC	int_2dh_reactivate 
 	cli				
 	push	ebx cx si di es
 	cmp	[vectors_suspend],0
@@ -423,8 +392,28 @@ loc_18:
 	xor	ax,ax			
 loc_19:
 	pop	es di si cx ebx
-	sti				
-	ds_iret				; Interrupt return
+	ret
+ENDP
+
+ALIGN	4
+	
+PROC	isr_2dh
+	ds_entry
+	cmp	dx,[tsr_kernel_id]
+	jz	short loc_1
+loc_2:
+	ds_jmp	old_int_2dh
+loc_1:			                        
+        cmp 	bx,INT_2DH_TOPFN            ; FN irrelevant for our handler?
+        ja 	short loc_2                  ; Yes, chain.
+	
+	push	bx
+        add 	bx,bx                       ; BX = index to int_2dh_fntable.
+        add 	bx,offset int_2dh_fntable   ; BX = offset of handler.
+        call 	[word bx]                   ; Call the appropriate FN handler.
+	pop	bx
+	sti
+	ds_iret					; Interrupt return
 ENDP
 
 Proc    strcmp_res                      
@@ -1775,7 +1764,7 @@ Proc    hook_ints
     
         mov bl,21h                      ; BL = int number of DOS FNs handler.
         mov ax,offset int_21h_handler   ; EAX = new handler for int 21h.
-;;;        call tsr_hookint                ; Hook int 21h.
+        call tsr_hookint                ; Hook int 21h.
      
         mov bl,2fh                      ; BL = int # of DOS Multiplex handler.
         mov ax,offset int_2fh_handler   ; EAX = new handler for int 2fh.
