@@ -3,7 +3,6 @@ PAGE  59,132
 ;                        ÄÍÍ¹³ CPUidle for DOS ³ÌÍÍÄ                         ;
 ;                           ßÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙß                            ;
 
-
 ;[KERNEL CHARACTERISTICS]
 ; Kernel name:          CPUidle for DOS.
 ; Programming stage:    Working version, Under development.
@@ -15,8 +14,6 @@ PAGE  59,132
 ;[NOTES]
 ; Ralphs intlist -> more idle possibilities.
 
-
-
 ;ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»;
 ;º ²²²²²²²²²²²²²²²²²²²²²²² RESIDENT PART OF PROGRAM ²²²²²²²²²²²²²²²²²²²²²²² º;
 ;ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼;
@@ -24,8 +21,10 @@ PAGE  59,132
 ;°°°°°°°°°°±±±±±±±±±± GLOBAL CODE & DATA FOR ALL HANDLERS ±±±±±±±±±±°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 .586p
-ideal                                   ; Yep, this prog is TASM 4.0 coded!
+ideal                                   	; Yep, this prog is TASM 4.0 coded!
 
+SEGMENT	DATA_R	DWORD PUBLIC  USE16 'REGDATA'
+ENDS
 SEGMENT	CODE_R	PARA PUBLIC  USE16 'RESIDENT'
 ENDS 
 SEGMENT	CODE_E	PARA PUBLIC  USE16 'ENDRESIDENT'
@@ -35,8 +34,8 @@ ENDS
 SEGMENT	DATA16	DWORD PUBLIC  USE16 'DATA'
 ENDS
 
-SEGMENT	CODE_R
-	ASSUME CS: CODE_R, DS:NOTHING
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+SEGMENT	DATA_R
 
 struc 	intr_vec_struc                                                             	
 	number  db  ?                                                              	
@@ -49,43 +48,232 @@ struc	intr_suspend_struc
 	bytes25	dd 0	
 ends
 
-INT2DH_BIOS	= 2dh * 4
 VECTOR_NUM	= 30
-tsr_kernel_id	dw	?					;data_11	stores KERNEL_ID
-tsr_psp_seg	dw	?					;data_12     	stores psp_seg
-tsr_env_seg	dw	?					;data_13   	stores env seg 
-new_int_2dh	dd	isr_2dh					;data_14
-old_int_2dh     dd 	?					;data_15
-intr_vectors	intr_vec_struc VECTOR_NUM dup (<>)		;data_16
-vectors_hooked	dw	0					;data_17
-suspend_vectors	intr_suspend_struc VECTOR_NUM dup (<>)		;data_18
-vectors_suspend	dw	0					;data_19	
+intr_vectors	intr_vec_struc VECTOR_NUM dup (<>)		
+vectors_hooked	dw	0					
+suspend_vectors	intr_suspend_struc VECTOR_NUM dup (<>)		
+vectors_suspend	dw	0						
 
-TSR_ID			= 0FEADh
+MODE_OPTIMIZE   = 01h                   	; Set if CPU optimization selected.
+MODE_HLT        = 02h                   	; Set if normal HLT method selected.
+MODE_APM        = 04h                   	; Set if APM cooling method selected.
+MODE_NOFORCE    = 08h                   	; Set if any FORCE MODE is disabled.
+MODE_WFORCE     = 10h                   	; Set if WEAK FORCE strategy selected.
+MODE_SFORCE     = 20h                   	; Set if STRONG FORCE strategy selected.
+MODE_MOUSE      = 80h				; Set if there is a mouse driver
+
+IRQ_00          = 01h                   	;
+IRQ_01          = 02h                   	;
+IRQ_02          = 04h                   	;
+IRQ_03          = 08h                   	;
+IRQ_04          = 10h                   	;
+IRQ_05          = 20h                   	; Flag set if that specific IRQ was
+IRQ_06          = 40h                   	; invoked. Should later be cleared by
+IRQ_07          = 80h                   	; kernel...
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+INT_XXH_FORCE   = 300                   	; # of calls to FN before forced HLT. 
+int_xxh_fcount  dd 	0          		; # int xxh FN(x) called repeatedly.
+irq_flags       db 	0          		; IRQ flags for kernel.
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+Struc 	qk_item
+        prog    db 12 dup (0), 0        	; Name of the child process.
+        hooknum db 0                    	; Number of FN hooks.
+        execnum dw 0                    	; "PID number" of child.
+Ends  	
+
+Struc  	qk_hook
+        fnaddr  dw 0                    	; Address of FN to hook.
+        newaddr dw 0                    	; New address of the FN.
+        oldaddr dw 0                    	; Old address of the FN.
+Ends 	
+
+Align 4
+
+quirk_table     qk_item <"NC.EXE", 1, 0>
+                 qk_hook <int_21h_fntable + 2ch * 2, int_xxh_forcehlt, int_xxh_zerocount>
+                qk_item <"SCANDISK.EXE", 1, 0>
+                 qk_hook <int_21h_fntable + 0bh * 2, int_xxh_zerocount, int_xxh_forcehlt>
+                QK_ITEMS = 2
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+old_int_10h     dd 	?              	
+old_int_14h   	dd 	?
+old_int_15h     dd 	?             	
+old_int_16h     dd 	?
+old_int_21h     dd 	?
+old_int_2dh     dd 	?		
+old_int_2fh     dd	?
+old_int_33h    	dd 	?
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+INT_14H_TOPFN   = 03h                   	; Highest FN that is handled.
+
+Align 4
+
+int_14h_fntable dw offset int_xxh_zerocount    ; FN 00h: Init COM port.
+                dw offset int_xxh_zerocount    ; FN 01h: Send char to COM port.
+                dw offset int_14h_normalhlt    ; FN 02h: Read char from COM port.
+                dw offset int_xxh_forcehlt     ; FN 03h: "Char ready?"
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+INT_16H_TOPFN   = 12h                   	; Highest FN that is handled.
+
+Align 4
+
+int_16h_fntable dw offset int_16h_normalhlt    ; FN 00h: Keyboard input.
+                dw offset int_xxh_forcehlt     ; FN 01h: "Keypressed?".
+                dw offset int_xxh_forcehlt     ; FN 02h: "SHIFT Keypressed?".
+                dw 0dh dup (int_xxh_zerocount) ; FNs 03h - 09h.
+                dw offset int_16h_normalhlt    ; FN 10h: Keyboard input (101-keys).
+                dw offset int_xxh_forcehlt     ; FN 11h: "Keypressed?" (101-keys).
+                dw offset int_xxh_forcehlt     ; FN 12h: "SHIFT Keypressed?" (101).
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+INT_21H_TOPFN   = 4ch                   	; Highest FN that is handled.
+
+Align 4
+
+int_21h_fntable dw offset int_xxh_zerocount    	; FN 00h: Terminate.
+                dw offset int_21h_normalhlt    	; FN 01h: Keyboard input.
+                dw offset int_xxh_zerocount    	; FN 02h: Display char.
+                dw offset int_xxh_skip         	; FN 03h: Auxiliary input.
+                dw offset int_xxh_zerocount    	; FN 04h: Auxiliary output.
+                dw offset int_xxh_zerocount    	; FN 05h: Printer output.
+                dw offset int_21h_fn06h        	; FN 06h: Console I/O.
+                dw offset int_21h_normalhlt    	; FN 07h: No echo unfiltered input.
+                dw offset int_21h_normalhlt    	; FN 08h: No echo input.
+                dw offset int_xxh_zerocount    	; FN 09h: Display string.
+                dw offset int_xxh_skip         	; FN 0ah: Buffered input.
+                dw offset int_xxh_forcehlt     	; FN 0bh: "Keypressed?"
+                dw offset int_xxh_skip         	; FN 0ch: Clear buffer and input.
+                dw 24h dup (int_xxh_zerocount) 	; FNs 0dh - 30h.
+                dw offset int_21h_fn31h        	; FN 31h: Terminate and Stay Resident.
+                dw 19h dup (int_xxh_zerocount) 	; FNs 32h - 4ah.
+                dw offset int_21h_fn4bh        	; FN 4bh: Execute child process.
+                dw offset int_21h_fn4ch        	; FN 4ch: Terminate child process.
+
+child_name      db 13 dup (0)           	; Name of the child to be executed.
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
 ACTION_TEST		= 0
 ACTION_UNINSTALL       	= 1
 ACTION_SUSPEND         	= 2
 ACTION_REACTIVATE	= 3
+
+TSR_ID		= 0FEADh
+tsr_kernel_id	dw	?			
+tsr_psp_seg	dw	?			
+tsr_env_seg	dw	?			
+tsr_mode_flags  dw 	?
+INT2DH_BIOS	= 2dh * 4
+
+exec_calls      dw 200                  	; Count of DOS FN 4bh calls.
+new_int_2dh	dd	isr_2dh			
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+INT_2FH_TOPFN   = 0ffffh                	; Highest FN that is handled.
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+Align 4
+
+user_mouse_handler  dd ? 
+user_mouse_mask     dw 0
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+Align 4                                  	
+
+old_masterirqs  dd 8 dup (?)     		; Original handlers of the hooked IRQs.
+new_masterirqs  dd irq_00_handler
+		dd irq_01_handler
+                dd irq_02_handler
+		dd irq_03_handler
+                dd irq_04_handler
+		dd irq_05_handler
+                dd irq_06_handler
+		dd irq_07_handler
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+ENDS
+
+;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+
+SEGMENT	CODE_R
+	ASSUME CS:CODE_R, DS:DATA_R
+tsr_ds	dw	?				;resident data segment value
+
+PROC	ds_set_enter
+	push	ax
+	mov	ax, [cs:tsr_ds]
+	mov	ds,ax
+	pop	ax	
+	ret
+ENDP
+
+PROC	ds_set_exit
+	push	bp
+	mov	bp, sp
+	push	ax
+	mov	ax, [bp+8]
+	mov	ds, ax
+	pop	ax
+	pop	bp	
+	ret
+ENDP
+
+macro	ds_entry
+	push	ds
+	call	ds_set_enter
+endm
+
+
+macro 	ds_jmp	location:req
+	push	[location]
+	call	ds_set_exit
+	retf	2	
+endm
+
+macro	ds_retf
+	pop	ds
+	retf		
+endm
+
+macro	ds_iret
+	pop	ds
+	iret
+endm
+
+ALIGN	4
 	
 PROC	isr_2dh
-	cmp	dx, [cs:tsr_kernel_id]
+	ds_entry
+	cmp	dx, [tsr_kernel_id]
 	jz	short loc_1
 loc_2:
-	jmp	[dword cs:old_int_2dh]
+	ds_jmp	old_int_2dh
 loc_1:			                        
 	cmp	bx, ACTION_TEST
 	jne	short loc_3		
 	mov	ax, TSR_ID
 	sti				
-	iret					; Interrupt return
+	ds_iret					; Interrupt return
 loc_3:
-	ASSUME 	DS: CODE_R
 	cmp	bx, ACTION_UNINSTALL
-	jne	short loc_10		
+	jne	loc_10		
 	cli				
-	push	cx si di ds es
-	mov	ax,cs
-	mov	ds,ax
+	push	cx si di es
 	xor	ax,ax			
 	mov	es,ax
 	mov	eax, [new_int_2dh]
@@ -97,8 +285,8 @@ loc_3:
 	jz	short loc_7		
 
 locloop_4:
-	movzx	di, [(intr_vec_struc si).number]	; Mov w/zero extend
-	shl	di,2					; Shift w/zeros fill
+	movzx	di, [(intr_vec_struc si).number]	
+	shl	di,2					
 	mov	eax,[(intr_vec_struc si).old_isr]
 	cmp	[es:di],eax
 	je	short loc_5		
@@ -107,43 +295,41 @@ locloop_4:
 	jne	short loc_8		
 loc_5:
 	add	si,size intr_vec_struc
-	loop	locloop_4		; Loop if cx > 0
+	loop	locloop_4				
 
 	mov	si,offset intr_vectors
 	mov	cx,[vectors_hooked]
 
 locloop_6:
 	mov	eax,[(intr_vec_struc si).old_isr]
-	movzx	di,[(intr_vec_struc si).number]	; Mov w/zero extend
-	shl	di,2			; Shift w/zeros fill
+	movzx	di,[(intr_vec_struc si).number]		
+	shl	di,2					
 	mov	[es:di],eax
 	add	si,size intr_vec_struc
-	loop	locloop_6		; Loop if cx > 0
+	loop	locloop_6				
 
 loc_7:
 	mov	eax, [old_int_2dh]
 	mov	[es:INT2DH_BIOS],eax
-	mov	ax, [tsr_psp_seg]		;xxx perhaps error, should be mov bx, [tsr_bx]
+	mov	ax, [tsr_psp_seg]		
 	mov	es,ax
 	mov	ah,49h
-	int	21h			; DOS Services  ah=function 49h
-					;  release memory block, es=seg
+	int	21h				; DOS Services  ah=function 49h
+						;  release memory block, es=seg
 	mov	ax,1
 	jmp	short loc_9
 loc_8:
 	xor	ax,ax			
 loc_9:
-	pop	es ds di si cx
+	pop	es di si cx
 	sti				
-	iret				; Interrupt return
+	ds_iret					; Interrupt return
 
 loc_10:
 	cmp	bx, ACTION_SUSPEND
 	jne	short loc_15		
 	cli				
-	push	ebx cx si di ds es
-	mov	ax,cs
-	mov	ds,ax
+	push	ebx cx si di es
 	cmp	[vectors_suspend],0
 	jne	short loc_13		
 	mov	si,offset intr_vectors
@@ -155,19 +341,19 @@ loc_10:
 
 locloop_11:
 	mov	ebx,[(intr_vec_struc si).new_isr]
-	ror	ebx,10h			; Rotate
-	mov	es,bx			;save isr seg
-	rol	ebx,10h			; Rotate
-	mov	al,[es:bx]         	;copy first byte of new isr
+	ror	ebx,10h					
+	mov	es,bx					;save isr seg
+	rol	ebx,10h					
+	mov	al,[es:bx]         			;copy first byte of new isr
 	mov	[(intr_suspend_struc di).byte1],al
-	mov	eax,[es:bx+1] 		;copy bytes 2-5 of new isr
+	mov	eax,[es:bx+1] 				;copy bytes 2-5 of new isr
 	mov	[(intr_suspend_struc di).bytes25],eax
 	mov	eax,[(intr_vec_struc si).old_isr]
-	mov	[byte ptr es:bx],0EAh  	;patch isr with JMP FAR
-	mov	[es:bx+1],eax       	;patch isr with jmp far old_intr_XX
+	mov	[byte ptr es:bx],0EAh  			;patch isr with JMP FAR
+	mov	[es:bx+1],eax       			;patch isr with jmp far old_intr_XX
 	add	si,size intr_vec_struc
 	add	di,size intr_suspend_struc
-	loop	locloop_11		; Loop if cx > 0
+	loop	locloop_11				
 
 loc_12:
 	mov	ax,1
@@ -175,17 +361,15 @@ loc_12:
 loc_13:
 	xor	ax,ax			
 loc_14:
-	pop	es ds di si cx ebx
+	pop	es di si cx ebx
 	sti				
-	iret				; Interrupt return
+	ds_iret					; Interrupt return
 
 loc_15:
 	cmp	bx, ACTION_REACTIVATE
 	jne	loc_2			
 	cli				
-	push	ebx cx si di ds es
-	mov	ax,cs
-	mov	ds,ax
+	push	ebx cx si di es
 	cmp	[vectors_suspend],0
 	je	short loc_18		
 	mov	si,offset intr_vectors
@@ -197,16 +381,16 @@ loc_15:
 
 locloop_16:
 	mov	ebx,[(intr_vec_struc si).new_isr]
-	ror	ebx,10h			; Rotate
+	ror	ebx,10h			
 	mov	es,bx
-	rol	ebx,10h			; Rotate
+	rol	ebx,10h			
 	mov	al,[(intr_suspend_struc di).byte1]
-	mov	[es:bx],al		;restore first byte of isr
+	mov	[es:bx],al				;restore first byte of isr
 	mov	eax,[(intr_suspend_struc di).bytes25]
-	mov	[es:bx+1],eax         	;restore bytes 2-5 of isr
+	mov	[es:bx+1],eax         			;restore bytes 2-5 of isr
 	add	si,size intr_vec_struc
 	add	di,size intr_suspend_struc
-	loop	locloop_16		; Loop if cx > 0
+	loop	locloop_16		
 
 loc_17:
 	mov	ax,1
@@ -214,67 +398,12 @@ loc_17:
 loc_18:
 	xor	ax,ax			
 loc_19:
-	pop	es ds di si cx ebx
+	pop	es di si cx ebx
 	sti				
-	iret				; Interrupt return
+	ds_iret				; Interrupt return
 ENDP
 
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-Struc 	qk_item
-        prog    db 12 dup (0), 0        ; Name of the child process.
-        hooknum db 0                    ; Number of FN hooks.
-        execnum dw 0                    ; "PID number" of child.
-Ends  	
-
-Struc  	qk_hook
-        fnaddr  dw 0                    ; Address of FN to hook.
-        newaddr dw 0                    ; New address of the FN.
-        oldaddr dw 0                    ; Old address of the FN.
-Ends 	
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-
-MODE_OPTIMIZE   = 01h                   ; Set if CPU optimization selected.
-MODE_HLT        = 02h                   ; Set if normal HLT method selected.
-MODE_APM        = 04h                   ; Set if APM cooling method selected.
-MODE_NOFORCE    = 08h                   ; Set if any FORCE MODE is disabled.
-MODE_WFORCE     = 10h                   ; Set if WEAK FORCE strategy selected.
-MODE_SFORCE     = 20h                   ; Set if STRONG FORCE strategy selected.
-MODE_MOUSE      = 80h					; Set if there is a mouse driver
-
-IRQ_00          = 01h                   ;
-IRQ_01          = 02h                   ;
-IRQ_02          = 04h                   ;
-IRQ_03          = 08h                   ;
-IRQ_04          = 10h                   ;
-IRQ_05          = 20h                   ; Flag set if that specific IRQ was
-IRQ_06          = 40h                   ; invoked. Should later be cleared by
-IRQ_07          = 80h                   ; kernel...
-
-INT_XXH_FORCE   = 300                   ; # of calls to FN before forced HLT. 
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-Align 4
-int_xxh_fcount  dd 0                    ;  # int xxh FN(x) called repeatedly.
-
-quirk_table     qk_item <"NC.EXE", 1, 0>
-                 qk_hook <int_21h_fntable + 2ch * 2, int_xxh_forcehlt, int_xxh_zerocount>
-                qk_item <"SCANDISK.EXE", 1, 0>
-                 qk_hook <int_21h_fntable + 0bh * 2, int_xxh_zerocount, int_xxh_forcehlt>
-                QK_ITEMS = 2
-
-exec_calls      dw 200                  ; Count of DOS FN 4bh calls.
-child_name      db 13 dup (0)           ; Name of the child to be executed.
-irq_flags       db 0                    ; IRQ flags for kernel.
-tsr_mode_flags  dw 0
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-	ASSUME 	DS: CODE_R
-Proc    strcmp_res                        ; NOTE: Copied from _string.h!!
+Proc    strcmp_res                      
         push ax cx si di
 
         mov cx,0FFh                     ; CX = maximum string length.
@@ -294,7 +423,6 @@ Proc    strcmp_res                        ; NOTE: Copied from _string.h!!
 Endp
 
 ;----------------------------------------------------------------------------;
-
 Proc    int_xxh_forcehlt
         inc [int_xxh_fcount]                    ; Increase force counter.
         cmp [int_xxh_fcount],INT_XXH_FORCE      ; Over the minimum?
@@ -365,36 +493,6 @@ Endp
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 21H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-
-INT_21H_TOPFN   = 4ch                   ; Highest FN that is handled.
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-Align 4
-
-old_int_21h     dd ?
-
-int_21h_fntable dw offset int_xxh_zerocount    ; FN 00h: Terminate.
-                dw offset int_21h_normalhlt    ; FN 01h: Keyboard input.
-                dw offset int_xxh_zerocount    ; FN 02h: Display char.
-                dw offset int_xxh_skip         ; FN 03h: Auxiliary input.
-                dw offset int_xxh_zerocount    ; FN 04h: Auxiliary output.
-                dw offset int_xxh_zerocount    ; FN 05h: Printer output.
-                dw offset int_21h_fn06h        ; FN 06h: Console I/O.
-                dw offset int_21h_normalhlt    ; FN 07h: No echo unfiltered input.
-                dw offset int_21h_normalhlt    ; FN 08h: No echo input.
-                dw offset int_xxh_zerocount    ; FN 09h: Display string.
-                dw offset int_xxh_skip         ; FN 0ah: Buffered input.
-                dw offset int_xxh_forcehlt     ; FN 0bh: "Keypressed?"
-                dw offset int_xxh_skip         ; FN 0ch: Clear buffer and input.
-                dw 24h dup (int_xxh_zerocount)  ; FNs 0dh - 30h.
-                dw offset int_21h_fn31h        ; FN 31h: Terminate and Stay Resident.
-                dw 19h dup (int_xxh_zerocount)  ; FNs 32h - 4ah.
-                dw offset int_21h_fn4bh        ; FN 4bh: Execute child process.
-                dw offset int_21h_fn4ch        ; FN 4ch: Terminate child process.
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Proc    int_21h_fn06h                   ; DOS FN: Console I/O.
         cmp dl,0ffh                     ; "Keypressed?" function requested?
@@ -574,11 +672,9 @@ Endp
 ;----------------------------------------------------------------------------;
 
 Align 4
-
 Proc    int_21h_handler                 ; DOS functions handler.
-        push ax bx ds
-        mov bx,cs                       ;
-        mov ds,bx                       ; CODE = DATA.
+	ds_entry
+        push ax bx 
 
         cmp ah,INT_21H_TOPFN            ; FN irrelevant for our handler?
         ja short @@old                  ; Yes, zero force counter and chain.
@@ -593,8 +689,8 @@ Proc    int_21h_handler                 ; DOS functions handler.
 
 @@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
 
-@@oldn: pop ds bx ax
-        jmp [dword cs:old_int_21h]      ; Chain to old interrupt handler.
+@@oldn: pop bx ax
+        ds_jmp old_int_21h      ; Chain to old interrupt handler.
 Endp
 
 
@@ -602,28 +698,6 @@ Endp
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 16H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-
-INT_16H_TOPFN   = 12h                   ; Highest FN that is handled.
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-
-Align 4
-
-old_int_16h     dd ?
-
-int_16h_fntable dw offset int_16h_normalhlt    ; FN 00h: Keyboard input.
-                dw offset int_xxh_forcehlt     ; FN 01h: "Keypressed?".
-                dw offset int_xxh_forcehlt     ; FN 02h: "SHIFT Keypressed?".
-                dw 0dh dup (int_xxh_zerocount)  ; FNs 03h - 09h.
-                dw offset int_16h_normalhlt    ; FN 10h: Keyboard input (101-keys).
-                dw offset int_xxh_forcehlt     ; FN 11h: "Keypressed?" (101-keys).
-                dw offset int_xxh_forcehlt     ; FN 12h: "SHIFT Keypressed?" (101).
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
 Proc    int_16h_normalhlt
         push bx                         ; Safety only - BX already saved in the main Int-16 handler
 
@@ -664,9 +738,8 @@ Endp
 Align 4
 
 Proc    int_16h_handler                 ; BIOS keyboard functions handler.
-        push ax bx ds
-        mov bx,cs                       ;
-        mov ds,bx                       ; CODE = DATA.
+	ds_entry
+        push ax bx
 
         cmp ah,INT_16H_TOPFN            ; FN irrelevant for our handler?
         ja short @@old                  ; Yes, zero force counter and chain.
@@ -681,8 +754,8 @@ Proc    int_16h_handler                 ; BIOS keyboard functions handler.
 
 @@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
 
-@@oldn: pop ds bx ax
-        jmp [dword cs:old_int_16h]      ; Chain to old interrupt handler.
+@@oldn: pop bx ax
+        ds_jmp old_int_16h      	; Chain to old interrupt handler.
 Endp
 
 
@@ -691,23 +764,11 @@ Endp
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 2FH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-INT_2FH_TOPFN   = 0ffffh                ; Highest FN that is handled.
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Align 4
-
-old_int_2fh     dd	?
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-Align 4
-
 Proc    int_2fh_handler
-        push ax dx ds                   ; (AX might be clobbered in int_xxh_forcehlt)
-        mov dx,cs                       ;
-        mov ds,dx                       ; CODE = DATA.
+	ds_entry
+        push ax dx                    ; (AX might be clobbered in int_xxh_forcehlt)
         
         cmp ax,1680h                    ; DPMI release time slice?
         je short @@dpmi                 ; Yes.
@@ -726,26 +787,18 @@ Proc    int_2fh_handler
 
 @@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
 
-@@oldn: pop ds dx ax
-        jmp [dword cs:old_int_2fh]      ; Chain to old interrupt handler.	
+@@oldn: pop dx ax
+        ds_jmp old_int_2fh      	; Chain to old interrupt handler.	
 Endp
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-Align 4
-
-old_int_33h         dd ?
-user_mouse_handler  dd ? 
-user_mouse_mask     dw 0
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Align 4
-
 Proc    int_33h_handler
         sti                                ; (let 'em run!)
-
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
+	ds_entry
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
         
         cmp ax,000Ch
         je short @@set_handler
@@ -754,35 +807,35 @@ Proc    int_33h_handler
         cmp ax,0018h
         je short @@set_alt_handler
 
-        jmp [dword cs:old_int_33h]      ; Chain to old interrupt handler.
+        ds_jmp old_int_33h      	; Chain to old interrupt handler.
 
 @@set_handler:
         push es dx cx
         call install_mouse_handler
         pop  cx dx es
-        iret
+        ds_iret
 
 @@xchg_handler:
         call install_mouse_handler
-        iret
+        ds_iret
 		
 @@set_alt_handler:
         mov ax,0FFFFh		; Return error
-        iret
+        ds_iret
 Endp
 
 Proc	mouse_handler
-	ASSUME DS:NOTHING
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
+	ds_entry
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
 
-        and ax,[cs:user_mouse_mask]
+        and ax,[user_mouse_mask]
         jz short @@done
 
         ;call debug_char
 
-        jmp [dword cs:user_mouse_handler]
+        ds_jmp user_mouse_handler
 @@done:		
-        retf
+        ds_retf
 Endp
 
 ;----------------------------------------------------------------------------;
@@ -798,11 +851,8 @@ Endp
 ;     mouse handler in ES:DX and the old event mask in CX.
 
 Proc	install_mouse_handler
-	ASSUME DS:CODE_R
-        push ds     ; (Do NOT save/restore CX, DX, ES - see note above)
-        push eax
-        mov ax,cs	; Set the DS to point to our segment
-        mov ds,ax
+	ds_entry
+        push eax               	; (Do NOT save/restore CX, DX, ES - see note above)
 
         ; Save the new mouse handler
 
@@ -842,8 +892,7 @@ Proc	install_mouse_handler
         pop es
 
         pop eax
-        pop ds
-        ret
+        ds_retf
 Endp
 
 Proc	dummy_mouse_handler
@@ -868,24 +917,6 @@ Endp
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 14H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-
-INT_14H_TOPFN   = 03h                   ; Highest FN that is handled.
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-Align 4
-
-old_int_14h   	dd ?
-
-int_14h_fntable dw offset int_xxh_zerocount    ; FN 00h: Init COM port.
-                dw offset int_xxh_zerocount    ; FN 01h: Send char to COM port.
-                dw offset int_14h_normalhlt    ; FN 02h: Read char from COM port.
-                dw offset int_xxh_forcehlt     ; FN 03h: "Char ready?"
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
 
 Proc    int_14h_normalhlt
 	sti                             ; Enable IRQs for following HLT.
@@ -921,9 +952,8 @@ Endp
 Align 4
 
 Proc    int_14h_handler                 ; BIOS serial I/O handler.
-        push ax bx ds
-        mov bx,cs                       ;
-        mov ds,bx                       ; CODE = DATA.
+	ds_entry
+        push ax bx
 
         cmp ah,INT_14H_TOPFN            ; FN irrelevant for our handler?
         ja short @@old                  ; Yes, zero force counter and chain.
@@ -938,8 +968,8 @@ Proc    int_14h_handler                 ; BIOS serial I/O handler.
 
 @@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
 
-@@oldn: pop ds bx ax
-        jmp [dword cs:old_int_14h]      ; Chain to old interrupt handler.
+@@oldn: pop bx ax
+        ds_jmp old_int_14h      	; Chain to old interrupt handler.
 Endp
 
 
@@ -949,20 +979,13 @@ Endp
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 1xH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-Align 4
-
-old_int_10h     dd ?              ;
-old_int_15h     dd ?             ; Original vector values.
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-	ASSUME 	DS: NOTHING
 
 Align 4
 
 Proc    int_10h_handler                 ; BIOS video functions handler.
-        mov [cs:int_xxh_fcount],0       ; Zero int xxh force counter.
-        jmp [dword cs:old_int_10h]      ; Chain to old interrupt handler.
+	ds_entry
+        mov [int_xxh_fcount],0       ; Zero int xxh force counter.
+        ds_jmp old_int_10h      ; Chain to old interrupt handler.
 Endp
 
 
@@ -971,12 +994,13 @@ Endp
 Align 4
 
 Proc    int_15h_handler                 ; BIOS AT Services handler.
+	ds_entry
         cmp ax,5305h                    ; APM function: CPU idle called?
         je short @@old                  ; No.
 
-        mov [cs:int_xxh_fcount],0       ; Zero int xxh force counter.
+        mov [int_xxh_fcount],0       ; Zero int xxh force counter.
 
-@@old:  jmp [dword cs:old_int_15h]      ; Chain to old interrupt handler.
+@@old:  ds_jmp old_int_15h      ; Chain to old interrupt handler.
 Endp
 
 
@@ -985,26 +1009,14 @@ Endp
 ;°°°°°°°°°°°°°°°°±±±±±±±±±±±±±±± IRQ HANDLERS ±±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-Align 4
-
-old_masterirqs  dd 8 dup (?)     ; Original handlers of the hooked IRQs.
-new_masterirqs  dd irq_00_handler
-		dd irq_01_handler
-                dd irq_02_handler
-		dd irq_03_handler
-                dd irq_04_handler
-		dd irq_05_handler
-                dd irq_06_handler
-		dd irq_07_handler
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Align 4
 
 Proc    irq_00_handler                  ; Handler for IRQ 0 (timer).
-        or [cs:irq_flags],IRQ_00        ; Mark that IRQ 0 occurred.
+	ds_entry
+        or [irq_flags],IRQ_00        ; Mark that IRQ 0 occurred.
 
-        jmp [dword cs:old_masterirqs]   ; Chain to old interrupt handler.
+        ds_jmp old_masterirqs   ; Chain to old interrupt handler.
 Endp
 
 
@@ -1012,10 +1024,11 @@ Endp
 Align 4
 
 Proc    irq_01_handler                  ; Handler for IRQ 1 (keyboard).
-        or [cs:irq_flags],IRQ_01        ; Mark that IRQ 1 occurred.
+	ds_entry
+        or [irq_flags],IRQ_01        ; Mark that IRQ 1 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 4]  ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 4>  ; Chain to old interrupt handler.
 Endp
 
 
@@ -1023,10 +1036,11 @@ Endp
 Align 4
 
 Proc    irq_02_handler                  ; Handler for IRQ 2 (slave PIC).
-        or [cs:irq_flags],IRQ_02        ; Mark that IRQ 2 occurred.
+	ds_entry
+        or [irq_flags],IRQ_02        ; Mark that IRQ 2 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 8]  ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 8>  ; Chain to old interrupt handler.
 Endp
 
 
@@ -1034,10 +1048,11 @@ Endp
 Align 4
 
 Proc    irq_03_handler                  ; Handler for IRQ 3 (COM2).
-        or [cs:irq_flags],IRQ_03        ; Mark that IRQ 3 occurred.
+	ds_entry
+        or [irq_flags],IRQ_03        ; Mark that IRQ 3 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 12] ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 12> ; Chain to old interrupt handler.
 Endp
 
 
@@ -1045,10 +1060,11 @@ Endp
 Align 4
 
 Proc    irq_04_handler                  ; Handler for IRQ 4 (COM1).
-        or [cs:irq_flags],IRQ_04        ; Mark that IRQ 4 occurred.
+	ds_entry
+        or [irq_flags],IRQ_04        ; Mark that IRQ 4 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 16] ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 16> ; Chain to old interrupt handler.
 Endp
 
 
@@ -1056,10 +1072,11 @@ Endp
 Align 4
 
 Proc    irq_05_handler                  ; Handler for IRQ 5.
-        or [cs:irq_flags],IRQ_05        ; Mark that IRQ 5 occurred.
+	ds_entry
+        or [irq_flags],IRQ_05        ; Mark that IRQ 5 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 20] ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 20> ; Chain to old interrupt handler.
 Endp
 
 
@@ -1067,10 +1084,11 @@ Endp
 Align 4
 
 Proc    irq_06_handler                  ; Handler for IRQ 6.
-        or [cs:irq_flags],IRQ_06        ; Mark that IRQ 6 occurred.
+	ds_entry
+        or [irq_flags],IRQ_06        ; Mark that IRQ 6 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 24] ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 24> ; Chain to old interrupt handler.
 Endp
 
 
@@ -1078,13 +1096,12 @@ Endp
 Align 4
 
 Proc    irq_07_handler                  ; Handler for IRQ 7.
-        or [cs:irq_flags],IRQ_07        ; Mark that IRQ 7 occurred.
+	ds_entry
+        or [irq_flags],IRQ_07        ; Mark that IRQ 7 occurred.
 
-        mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
-        jmp [dword cs:old_masterirqs + 28] ; Chain to old interrupt handler.
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        ds_jmp <old_masterirqs + 28> ; Chain to old interrupt handler.
 Endp
-
-RESIDENT_END:
 
 ENDS
 
@@ -1218,9 +1235,9 @@ cpu_386fpu_str		db	'Standard 80386 with 80387', 0
 cpu_486sx_str		db	'Standard 80486SX', 0
 cpu_486dx_str		db	'Standard 80486DX', 0
 
-cyrix_0			db	00h
-cyrix_1			db 	00h		;1b37
-cyrix_2			db	00h         	;1bc8
+cyrix_0			db	0h
+cyrix_1			db 	0h		
+cyrix_2			db	0h         	
 cpu_cyrix_01_str	db	'CyrixInstead', 0
 cpu_cyrix_02_str	db	'Unknown Cyrix', 0
 cpu_cyrix_03_str	db	'Cyrix 486SLC', 0
@@ -1251,7 +1268,7 @@ cpu_cyrix_27_str	db	'Cyrix 6x86MX', 0
 cpu_cyrix_28_str	db	'Cyrix MediaGX', 0
 cpu_cyrix_29_str	db	'Cyrix GXm', 0
 
-intel_0			db	00h				
+intel_0			db	0h				
 cpu_intel_01_str	db	'GenuineIntel', 0
 cpu_intel_02_str	db	'Unknown Intel', 0
 cpu_intel_03_str	db	'Intel 486DX at 25/33 Mhz', 0
@@ -1285,7 +1302,7 @@ cpu_amd_11_str		db	'AMD K6-MMX', 0
 cpu_amd_12_str		db	'AMD K6-3D', 0
 cpu_amd_13_str		db	'AMD K6-Plus', 0
                 	
-idt_0			db	? 
+idt_0			db	0h
 cpu_idt_01_str		db	'CentaurHauls', 0		
 cpu_idt_02_str		db	'Unknown IDT', 0
 cpu_idt_03_str		db	'IDT WinChip C6', 0
@@ -1305,7 +1322,7 @@ cpu_umc_04_str		db	'UMC U5S', 0
 ENDS
 
 SEGMENT	CODE16
-	ASSUME CS:CODE16, DS:DATA16, SS:STACK16, FS:CODE_R
+	ASSUME CS:CODE16, DS:DATA16, SS:STACK16, FS:DATA_R
 
 PROC	mem_lrelease
 	push	ax es
@@ -1352,7 +1369,7 @@ PROC	TSR_REACTIVATE
 	retn
 ENDP
 
-	ASSUME 	DS: CODE_R
+	ASSUME 	DS: DATA_R
 
 PROC	TSR_HOOKINT
 	pushf				
@@ -1387,7 +1404,7 @@ macro	exit	exit_code
 	int	21h
 endm
 
-	ASSUME	DS:CODE_R
+	ASSUME	DS:DATA_R
 PROC	tsr_install
 	;       mov cx,OFFSET RESIDENT_END             ;
 	;	mov di,[mode_flags]		;
@@ -1411,8 +1428,13 @@ PROC	tsr_install
 	mov	[es:int2dh_bios],eax		;set in ivt
 	mov	ax,[tsr_env_seg]
 	call	mem_lrelease
+	mov	si, CODE_R
+	mov	ds, si
+	ASSUME	DS:CODE_R
+	mov	[tsr_ds],fs	
 	pop	ds
 	mov	dx,cx
+	sub 	dx,bx                       ;    ,,
 	mov	ax,3100h
 	int	21h				; DOS Services  ah=function 31h
 	exit	1
@@ -1434,7 +1456,7 @@ error_exit:                      	; Exits with error message.
 Proc    init
 	mov ax,DATA16                       ;
 	mov ds,ax                       ; Set data segment.
-	mov ax,CODE_R
+	mov ax,DATA_R
 	mov fs,ax
 	xor ax,ax			;
 	mov gs,ax               	; GS = segment of IVT.
@@ -1719,7 +1741,7 @@ Proc    hook_ints
         ;-  -  -  -  -  -  -  -  -  -  -;
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-        mov ax,fs                       ;
+        mov ax,CODE_R                       ;
         shl eax,16                      ; High WORD of EAX = CODE_R.
 
         mov bl,10h                      ; BL = int number of video handler.
@@ -1750,14 +1772,14 @@ Proc    hook_ints
         jz short @@done
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-        mov ax,fs
+        mov ax,CODE_R
         mov es,ax
         mov dx,offset mouse_handler
         mov cx,7Fh			; Try to catch all mouse events
         mov ax,0014h
         int 33h
 
-        mov ax,fs                 	;
+        mov ax,CODE_R                 	;
         shl eax,16                      ; High WORD of EAX = CODE_R		
         mov bl,33h                      ; BL = int # of Mouse handler.
         mov ax,offset int_33h_handler   ; EAX = new handler for int 33h.
@@ -1956,14 +1978,9 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 	mov di,[mode_flags]		;
-;        mov cx,cs			;///
-        mov cx,CODE_E                  	;///
-	mov bx,[psp_seg]                ; add PSP
-;	mov ah,62h
-;	int 21h
-	sub cx,bx                       ;    ,,
+        mov cx,CODE_E                  	;
+	mov bx,[psp_seg]                ;
 	mov dx,KERNEL_ID                ;    
-;	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
 	call tsr_install                ; Make kernel TSR.
 Endp
