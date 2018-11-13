@@ -26,19 +26,22 @@ PAGE  59,132
 .586p
 ideal                                   ; Yep, this prog is TASM 4.0 coded!
 
+SEGMENT	CODE_R	PARA PUBLIC  USE16 'CODE'
+ENDS 
+SEGMENT	DATA16	DWORD PUBLIC  USE16 'DATA'
+ENDS
 SEGMENT	CODE16	PARA PUBLIC  USE16 'CODE'
-	ASSUME CS: CODE16, DS:NOTHING, SS:STACK16
+ENDS
+
+SEGMENT	CODE_R
+	ASSUME CS: CODE_R, DS:NOTHING
+
 RESIDENT_START:
 
-struc	rmdw
-	ofss	dw 0
-	segm	dw 0
-ends
-
 struc 	intr_vec_struc                                                             	
-	number  db  0                                                              	
- 	old_isr dd  0                                                              	             
- 	new_isr dd  0                                                              	            
+	number  db  ?                                                              	
+ 	old_isr dd  ?                                                              	             
+ 	new_isr dd  ?                                                              	            
 ends                                                                               	
 
 struc	intr_suspend_struc
@@ -47,12 +50,12 @@ struc	intr_suspend_struc
 ends
 
 INT2DH_BIOS	= 2dh * 4
-VECTOR_NUM	= 6
-tsr_kernel_id	dw	0					;data_11	stores KERNEL_ID
-tsr_psp_seg	dw	0					;data_12     	stores psp_seg
-tsr_env_seg	dw	0					;data_13   	stores env seg 
+VECTOR_NUM	= 30
+tsr_kernel_id	dw	?					;data_11	stores KERNEL_ID
+tsr_psp_seg	dw	?					;data_12     	stores psp_seg
+tsr_env_seg	dw	?					;data_13   	stores env seg 
 new_int_2dh	dd	isr_2dh					;data_14
-old_int_2dh     rmdw <0, 0>					;data_15
+old_int_2dh     dd 	?					;data_15
 intr_vectors	intr_vec_struc VECTOR_NUM dup (<>)		;data_16
 vectors_hooked	dw	0					;data_17
 suspend_vectors	intr_suspend_struc VECTOR_NUM dup (<>)		;data_18
@@ -69,14 +72,14 @@ PROC	isr_2dh
 	jz	short loc_1
 loc_2:
 	jmp	[dword cs:old_int_2dh]
-loc_1:			                        ;* No entry point to code
+loc_1:			                        
 	cmp	bx, ACTION_TEST
 	jne	short loc_3		
 	mov	ax, TSR_ID
 	sti				
-	iret				; Interrupt return
+	iret					; Interrupt return
 loc_3:
-	ASSUME 	DS: CODE16
+	ASSUME 	DS: CODE_R
 	cmp	bx, ACTION_UNINSTALL
 	jne	short loc_10		
 	cli				
@@ -95,7 +98,7 @@ loc_3:
 
 locloop_4:
 	movzx	di, [(intr_vec_struc si).number]	; Mov w/zero extend
-	shl	di,2			; Shift w/zeros fill
+	shl	di,2					; Shift w/zeros fill
 	mov	eax,[(intr_vec_struc si).old_isr]
 	cmp	[es:di],eax
 	je	short loc_5		
@@ -118,10 +121,13 @@ locloop_6:
 	loop	locloop_6		; Loop if cx > 0
 
 loc_7:
-	mov	eax, [dword ptr old_int_2dh]
+	mov	eax, [old_int_2dh]
 	mov	[es:INT2DH_BIOS],eax
 	mov	ax, [tsr_psp_seg]		;xxx perhaps error, should be mov bx, [tsr_bx]
-	call	mem_lrelease
+	mov	es,ax
+	mov	ah,49h
+	int	21h			; DOS Services  ah=function 49h
+					;  release memory block, es=seg
 	mov	ax,1
 	jmp	short loc_9
 loc_8:
@@ -214,7 +220,6 @@ loc_19:
 ENDP
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-ALIGN	16
 
 Struc 	qk_item
         prog    db 12 dup (0), 0        ; Name of the child process.
@@ -227,7 +232,6 @@ Struc  	qk_hook
         newaddr dw 0                    ; New address of the FN.
         oldaddr dw 0                    ; Old address of the FN.
 Ends 	
-
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
@@ -257,9 +261,6 @@ INT_XXH_FORCE   = 300                   ; # of calls to FN before forced HLT.
 Align 4
 int_xxh_fcount  dd 0                    ;  # int xxh FN(x) called repeatedly.
 
-mode_flags      db MODE_SFORCE          ; Config flags for program startup.
-irq_flags       db 0                    ; IRQ flags for kernel.
-
 quirk_table     qk_item <"NC.EXE", 1, 0>
                  qk_hook <int_21h_fntable + 2ch * 2, int_xxh_forcehlt, int_xxh_zerocount>
                 qk_item <"SCANDISK.EXE", 1, 0>
@@ -268,10 +269,12 @@ quirk_table     qk_item <"NC.EXE", 1, 0>
 
 exec_calls      dw 200                  ; Count of DOS FN 4bh calls.
 child_name      db 13 dup (0)           ; Name of the child to be executed.
+irq_flags       db 0                    ; IRQ flags for kernel.
+tsr_mode_flags  dw 0
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-	ASSUME 	DS: CODE16
-Proc    _str_cmp                        ; NOTE: Copied from _string.h!!
+	ASSUME 	DS: CODE_R
+Proc    strcmp_res                        ; NOTE: Copied from _string.h!!
         push ax cx si di
 
         mov cx,0FFh                     ; CX = maximum string length.
@@ -290,7 +293,6 @@ Proc    _str_cmp                        ; NOTE: Copied from _string.h!!
         ret
 Endp
 
-
 ;----------------------------------------------------------------------------;
 
 Proc    int_xxh_forcehlt
@@ -301,11 +303,11 @@ Proc    int_xxh_forcehlt
         mov [irq_flags],0               ; Clear IRQ flags.
         sti                             ; Enable IRQs for following HLT.
 
-        test [mode_flags],MODE_APM      ; APM usage requested?
+        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
         jnz short @@apm                 ; Yes.
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-@@std:  test [mode_flags],MODE_SFORCE   ; Running under STRONG FORCE mode?
+@@std:  test [tsr_mode_flags],MODE_SFORCE   ; Running under STRONG FORCE mode?
         jnz short @@stds                ; Yes.
 
 @@stdw: hlt                             ; Enter power saving mode.
@@ -320,7 +322,7 @@ Proc    int_xxh_forcehlt
         ;-  -  -  -  -  -  -  -  -  -  -;
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-@@apm:  test [mode_flags],MODE_SFORCE   ; Running under STRONG FORCE mode?
+@@apm:  test [tsr_mode_flags],MODE_SFORCE   ; Running under STRONG FORCE mode?
         jnz short @@apms                ; Yes.
 
 @@apmw:
@@ -371,7 +373,7 @@ INT_21H_TOPFN   = 4ch                   ; Highest FN that is handled.
 
 Align 4
 
-old_int_21h     rmdw <0, 0>
+old_int_21h     dd ?
 
 int_21h_fntable dw offset int_xxh_zerocount    ; FN 00h: Terminate.
                 dw offset int_21h_normalhlt    ; FN 01h: Keyboard input.
@@ -453,7 +455,7 @@ Proc    int_21h_fn4bh                   ; DOS FN: Execute child process.
         mov es,ax                       ; ES:DI = ptr to ASCIIZ name of child.
 
 @@find: lea si,[(qk_item bx).prog]      ; SI = ptr to quirky child name.
-        call _str_cmp                   ; Is this child being executed?
+        call strcmp_res                 ; Is this child being executed?
         je short @@set                  ; Yes, handle it.
 
         mov al,[(qk_item bx).hooknum]   ; AL = number of FN hooks.
@@ -544,7 +546,7 @@ Proc    int_21h_normalhlt
         sti                             ; Enable IRQs for following HLT.
         mov ah,0bh                      ; Int 21h FN: "Keypressed?".
 
-        test [mode_flags],MODE_APM      ; APM usage requested?
+        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
         jnz short @@apml                ; Yes.
 
 @@stdl: hlt                             ; Enter power saving mode.
@@ -571,7 +573,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
-Align 16
+Align 4
 
 Proc    int_21h_handler                 ; DOS functions handler.
         push ax bx ds
@@ -609,7 +611,7 @@ INT_16H_TOPFN   = 12h                   ; Highest FN that is handled.
 
 Align 4
 
-old_int_16h     rmdw <0, 0>
+old_int_16h     dd ?
 
 int_16h_fntable dw offset int_16h_normalhlt    ; FN 00h: Keyboard input.
                 dw offset int_xxh_forcehlt     ; FN 01h: "Keypressed?".
@@ -622,7 +624,6 @@ int_16h_fntable dw offset int_16h_normalhlt    ; FN 00h: Keyboard input.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-
 Proc    int_16h_normalhlt
         push bx                         ; Safety only - BX already saved in the main Int-16 handler
 
@@ -630,7 +631,7 @@ Proc    int_16h_normalhlt
         mov bh,ah                       ; Save AH (FN number).
         sti                             ; Enable IRQs for following HLT.
 
-        test [mode_flags],MODE_APM      ; APM usage requested?
+        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
         jnz short @@apml                ; Yes.
 
 @@stdl: pushf                           ;
@@ -660,7 +661,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
-Align 16
+Align 4
 
 Proc    int_16h_handler                 ; BIOS keyboard functions handler.
         push ax bx ds
@@ -697,11 +698,11 @@ INT_2FH_TOPFN   = 0ffffh                ; Highest FN that is handled.
 
 Align 4
 
-old_int_2fh     rmdw <0, 0>
+old_int_2fh     dd	?
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-Align 16
+Align 4
 
 Proc    int_2fh_handler
         push ax dx ds                   ; (AX might be clobbered in int_xxh_forcehlt)
@@ -726,22 +727,20 @@ Proc    int_2fh_handler
 @@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
 
 @@oldn: pop ds dx ax
-        jmp [dword cs:old_int_2fh]      ; Chain to old interrupt handler.
+        jmp [dword cs:old_int_2fh]      ; Chain to old interrupt handler.	
 Endp
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 Align 4
 
-old_int_33h         rmdw <0, 0>
-user_mouse_handler  rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
+old_int_33h         dd ?
+user_mouse_handler  dd ? 
 user_mouse_mask     dw 0
-dummy_handler_ptr   rmdw <OFFSET dummy_mouse_handler, SEG dummy_mouse_handler>
-
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-Align 16
+Align 4
 
 Proc    int_33h_handler
         sti                                ; (let 'em run!)
@@ -773,14 +772,15 @@ Proc    int_33h_handler
 Endp
 
 Proc	mouse_handler
+	ASSUME DS:NOTHING
         mov [cs:int_xxh_fcount],0          ; Zero int xxh force counter.
 
-        and ax,[word ptr cs:user_mouse_mask]
+        and ax,[cs:user_mouse_mask]
         jz short @@done
 
         ;call debug_char
 
-        jmp [dword ptr cs:user_mouse_handler]
+        jmp [dword cs:user_mouse_handler]
 @@done:		
         retf
 Endp
@@ -798,6 +798,7 @@ Endp
 ;     mouse handler in ES:DX and the old event mask in CX.
 
 Proc	install_mouse_handler
+	ASSUME DS:CODE_R
         push ds     ; (Do NOT save/restore CX, DX, ES - see note above)
         push eax
         mov ax,cs	; Set the DS to point to our segment
@@ -808,15 +809,16 @@ Proc	install_mouse_handler
         mov ax,es
         rol eax,16
         mov ax,dx		; EAX now contains the new handler
-        test eax,eax	; Is the new handler null?
+        test eax,eax		; Is the new handler null?
         jnz short @@valid_handler
-
-        mov eax,[dword dummy_handler_ptr]	; YES, replace with dummy_mouse_handler and zero the mask
+  	mov ax,cs
+        rol eax,16		; YES, replace with dummy_mouse_handler and zero the mask
+	mov ax,offset dummy_mouse_handler
         xor cx,cx
 
 @@valid_handler:
-        xchg [dword ptr user_mouse_handler],eax
-        xchg [word ptr user_mouse_mask],cx
+        xchg [user_mouse_handler],eax
+        xchg [user_mouse_mask],cx
         mov dx,ax	; Save the previous handler in ES:DX
         ror eax,16
         mov es,ax
@@ -827,7 +829,7 @@ Proc	install_mouse_handler
 
         ; Install our real mouse handler
 
-        mov dx,SEG mouse_handler
+        mov dx,cs
         mov es,dx
         mov dx,offset mouse_handler
         mov cx,7Fh						; Catch all mouse events
@@ -874,7 +876,7 @@ INT_14H_TOPFN   = 03h                   ; Highest FN that is handled.
 
 Align 4
 
-old_int_14h     rmdw <0, 0>
+old_int_14h   	dd ?
 
 int_14h_fntable dw offset int_xxh_zerocount    ; FN 00h: Init COM port.
                 dw offset int_xxh_zerocount    ; FN 01h: Send char to COM port.
@@ -888,7 +890,7 @@ int_14h_fntable dw offset int_xxh_zerocount    ; FN 00h: Init COM port.
 Proc    int_14h_normalhlt
 	sti                             ; Enable IRQs for following HLT.
 
-        test [mode_flags],MODE_APM      ; APM usage requested?
+        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
         jnz short @@apml                ; Yes.
 
 @@stdl: hlt                             ; Enter power saving mode.
@@ -916,7 +918,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
-	Align 16
+Align 4
 
 Proc    int_14h_handler                 ; BIOS serial I/O handler.
         push ax bx ds
@@ -949,14 +951,14 @@ Endp
 
 Align 4
 
-old_int_10h     rmdw <0, 0>             ;
-old_int_15h     rmdw <0, 0>             ; Original vector values.
-
-
+old_int_10h     dd ?              ;
+old_int_15h     dd ?             ; Original vector values.
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 	ASSUME 	DS: NOTHING
+
+Align 4
 
 Proc    int_10h_handler                 ; BIOS video functions handler.
         mov [cs:int_xxh_fcount],0       ; Zero int xxh force counter.
@@ -966,6 +968,7 @@ Endp
 
 ;----------------------------------------------------------------------------;
 
+Align 4
 
 Proc    int_15h_handler                 ; BIOS AT Services handler.
         cmp ax,5305h                    ; APM function: CPU idle called?
@@ -984,18 +987,19 @@ Endp
 
 Align 4
 
-old_masterirqs  rmdw 8 dup (<0, 0>)     ; Original handlers of the hooked IRQs.
-
-new_masterirqs  rmdw <OFFSET irq_00_handler, SEG irq_00_handler>, <OFFSET irq_01_handler, SEG irq_01_handler>
-                rmdw <OFFSET irq_02_handler, SEG irq_02_handler>, <OFFSET irq_03_handler, SEG irq_03_handler>
-                rmdw <OFFSET irq_04_handler, SEG irq_04_handler>, <OFFSET irq_05_handler, SEG irq_05_handler>
-                rmdw <OFFSET irq_06_handler, SEG irq_06_handler>, <OFFSET irq_07_handler, SEG irq_07_handler>
-
-
+old_masterirqs  dd 8 dup (?)     ; Original handlers of the hooked IRQs.
+new_masterirqs  dd irq_00_handler
+		dd irq_01_handler
+                dd irq_02_handler
+		dd irq_03_handler
+                dd irq_04_handler
+		dd irq_05_handler
+                dd irq_06_handler
+		dd irq_07_handler
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
-Align 16
+Align 4
 
 Proc    irq_00_handler                  ; Handler for IRQ 0 (timer).
         or [cs:irq_flags],IRQ_00        ; Mark that IRQ 0 occurred.
@@ -1005,7 +1009,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_01_handler                  ; Handler for IRQ 1 (keyboard).
         or [cs:irq_flags],IRQ_01        ; Mark that IRQ 1 occurred.
@@ -1016,7 +1020,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_02_handler                  ; Handler for IRQ 2 (slave PIC).
         or [cs:irq_flags],IRQ_02        ; Mark that IRQ 2 occurred.
@@ -1027,7 +1031,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_03_handler                  ; Handler for IRQ 3 (COM2).
         or [cs:irq_flags],IRQ_03        ; Mark that IRQ 3 occurred.
@@ -1038,7 +1042,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_04_handler                  ; Handler for IRQ 4 (COM1).
         or [cs:irq_flags],IRQ_04        ; Mark that IRQ 4 occurred.
@@ -1049,7 +1053,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_05_handler                  ; Handler for IRQ 5.
         or [cs:irq_flags],IRQ_05        ; Mark that IRQ 5 occurred.
@@ -1060,7 +1064,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_06_handler                  ; Handler for IRQ 6.
         or [cs:irq_flags],IRQ_06        ; Mark that IRQ 6 occurred.
@@ -1071,7 +1075,7 @@ Endp
 
 
 ;----------------------------------------------------------------------------;
-
+Align 4
 
 Proc    irq_07_handler                  ; Handler for IRQ 7.
         or [cs:irq_flags],IRQ_07        ; Mark that IRQ 7 occurred.
@@ -1082,120 +1086,9 @@ Endp
 
 RESIDENT_STOP:
 
-Align 16
+ENDS
 
-	ASSUME 	DS: CODE16
-
-PROC	mem_lrelease
-	push	ax es
-	mov	es,ax
-	mov	ah,49h
-	int	21h			; DOS Services  ah=function 49h
-					;  release memory block, es=seg
-	pop	es ax
-	retn
-ENDP
-
-PROC	TSR_INSTCHECK
-	push	bx
-	xor	bx,bx			
-	int	2Dh			; ??INT Non-standard interrupt
-	cmp	ax, TSR_ID
-	sete	al			; Set byte if equal
-	mov	ah,0
-	pop	bx
-	retn
-ENDP
-
-PROC	TSR_UNINSTALL
-	push	bx
-	mov	bx, ACTION_UNINSTALL
-	int	2Dh			; ??INT Non-standard interrupt
-	pop	bx
-	retn
-ENDP
-
-PROC	TSR_SUSPEND
-	push	bx
-	mov	bx, ACTION_SUSPEND
-	int	2Dh			; ??INT Non-standard interrupt
-	pop	bx
-	retn
-ENDP
-
-PROC	TSR_REACTIVATE
-	push	bx
-	mov	bx, ACTION_REACTIVATE
-	int	2Dh			; ??INT Non-standard interrupt
-	pop	bx
-	retn
-ENDP
-
-PROC	TSR_HOOKINT
-	pushf				
-	pushad				
-	push	es
-	cli				
-	xor	esi,esi			                                                 
-	mov	es,si                                                   	
-	mov	ecx, size intr_vec_struc                 			
-	mov	si, [vectors_hooked]		        		
-	inc	[vectors_hooked]         
-	imul	esi,ecx			           	  			
-	add	si,offset intr_vectors	        
-	mov	[(intr_vec_struc si).number],bl                  		
-	mov	[(intr_vec_struc si).new_isr],eax                		
-	xor	bh,bh			           	
-	shl	bx,2			           	
-	xchg	[es:bx],eax                        
-	mov	[(intr_vec_struc si).old_isr],eax  
-	sti				
-	pop	es
-	popad				
-	popf				
-	retn
-ENDP
-
-PROC	tsr_install
-	;       mov cx,OFFSET RESIDENT_END             ;
-	;	mov dx,KERNEL_ID                ;
-	;	mov bx,[psp_seg]                ;
-	;	mov ax,[env_seg]                ;
-	;	call tsr_install                ; Make kernel TSR.
-	cli					
-	mov	[tsr_kernel_id],dx
-	mov	[tsr_psp_seg],bx
-	mov	[tsr_env_seg],ax
-	xor	ax,ax				
-	mov	es,ax                   	
-	mov	eax,[es:int2dh_bios]		;get original isr 2dh
-	mov	[dword old_int_2dh],eax		;store away
-	mov	eax,[new_int_2dh]			;new isr 2dh
-	mov	[es:int2dh_bios],eax		;set in ivt
-	mov	ax,[tsr_env_seg]
-	call	mem_lrelease
-	mov	dx,cx
-IFDEF	WRONG_RESIDENT
-	sub	dx,bx
-ELSE
-	nop
-	nop
-ENDIF
-	mov	ax,3100h
-	int	21h				; DOS Services  ah=function 31h
-	ret
-ENDP
-
-
-
-;ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»;
-;º ²²²²²²²²²²²²²²²²²²²² INITIALIZATION PART OF PROGRAM ²²²²²²²²²²²²²²²²²²²² º;
-;ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼;
-
-
-
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-Align 16
+SEGMENT	DATA16
 
 KERNEL_NAME   equ "CPUidle for DOS"     ; Name of the kernel.
 KERNEL_FILE   equ "DOSidle"             ; Name of the .exe (compiled) kernel.
@@ -1209,12 +1102,6 @@ ON		= 01h
 CR		= 13
 LF		= 10
 NL		equ <CR,LF>
-
-macro	exit	exit_code
-	mov	al, exit_code
-	mov	ah, 4ch
-	int	21h
-endm
 
 psp_seg         dw 0
 env_seg         dw 0
@@ -1247,9 +1134,9 @@ par_table	par_item <"-H", par_help>
 ;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 msg_intro       db KERNEL_NAME, " V3.00  [Build 0200]", NL
-                db "Copyright (C) by Marton Balog, 1998." 
-		db "			Updates 2015 by I. Tsenov & M. Kennedy", NL
-		db "			Updates 2018 by Wojciech Galazka",NL,0
+                db "Copyright (C) by Marton Balog, 1998.", NL
+		db "		Updates 2015 by I. Tsenov & M. Kennedy", NL
+		db "		Updates 2018 by Wojciech Galazka",NL,0
 msg_help        db "Syntax:    ", KERNEL_FILE, " [Options]", NL
                 db "--------", NL,0
 msg_options_1   db "Standard   -On     Activate ", KERNEL_FILE, ".", NL
@@ -1308,8 +1195,230 @@ err_dos_vers    db "[#32]: MS-DOS 5.00 or later is required.",0
 err_cmdln       db "[#40]: Invalid command-line switch.",0
 err_v86         db "[#50]: CPU in V86 mode and no VCPI or DPMI host present.",0
 
+mode_flags  		dw 	MODE_SFORCE          ; Config flags for program startup.
+hex_table		db	'0123456789ABCDEF'
 
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
+v86_callback		dd	0
+fpu_check		dw	0
+
+cpu_name		db	49 dup (0)			
+cpuid_str		db    	13 dup (0)			
+cpu_stepping		db	0                      		
+cpu_family		db	0				
+cpu_model		db	0				
+cpu_type        	db	0				
+cpu_features   		dd	0				
+
+highest_basic_cpuid	dd 	0		
+highest_ext_cpuid	dd      0		
+cpu_failed_str		db	'CPU detection failed.',0
+                	
+cpu_386_str		db	'Standard 80386', 0
+cpu_386fpu_str		db	'Standard 80386 with 80387', 0
+cpu_486sx_str		db	'Standard 80486SX', 0
+cpu_486dx_str		db	'Standard 80486DX', 0
+
+cyrix_0			db	00h
+cyrix_1			db 	00h		;1b37
+cyrix_2			db	00h         	;1bc8
+cpu_cyrix_01_str	db	'CyrixInstead', 0
+cpu_cyrix_02_str	db	'Unknown Cyrix', 0
+cpu_cyrix_03_str	db	'Cyrix 486SLC', 0
+cpu_cyrix_04_str	db	'Cyrix 486DLC', 0
+cpu_cyrix_05_str	db	'Cyrix 486SLC2', 0
+cpu_cyrix_06_str	db	'Cyrix 486DLC2', 0
+cpu_cyrix_07_str	db	'Cyrix 486SRx', 0
+cpu_cyrix_08_str	db	'Cyrix 486DRx', 0
+cpu_cyrix_09_str	db	'Cyrix 486SRx2', 0
+cpu_cyrix_10_str	db	'Cyrix 486DRx2', 0
+cpu_cyrix_11_str	db	'Cyrix 486SRu', 0
+cpu_cyrix_12_str	db	'Cyrix 486DRu', 0
+cpu_cyrix_13_str	db	'Cyrix 486SRu2', 0
+cpu_cyrix_14_str	db	'Cyrix 486DRu2', 0
+cpu_cyrix_15_str	db	'Cyrix 486S', 0
+cpu_cyrix_16_str	db	'Cyrix 486S2', 0
+cpu_cyrix_17_str	db	'Cyrix 486Se', 0
+cpu_cyrix_18_str	db	'Cyrix 486S2e', 0
+cpu_cyrix_19_str	db	'Cyrix 486DX', 0
+cpu_cyrix_20_str	db	'Cyrix 486DX2', 0
+cpu_cyrix_21_str	db	'Cyrix 486SLC/DLC', 0
+cpu_cyrix_22_str	db	'Cyrix 486Sa', 0
+cpu_cyrix_23_str	db	'Cyrix 486DX4', 0
+cpu_cyrix_24_str	db	'Cyrix 5x86', 0
+cpu_cyrix_25_str	db	'Cyrix 6x86', 0
+cpu_cyrix_26_str	db	'Cyrix 6x86L', 0
+cpu_cyrix_27_str	db	'Cyrix 6x86MX', 0
+cpu_cyrix_28_str	db	'Cyrix MediaGX', 0
+cpu_cyrix_29_str	db	'Cyrix GXm', 0
+
+intel_0			db	00h				
+cpu_intel_01_str	db	'GenuineIntel', 0
+cpu_intel_02_str	db	'Unknown Intel', 0
+cpu_intel_03_str	db	'Intel 486DX at 25/33 Mhz', 0
+cpu_intel_04_str	db	'Intel 486DX at 50 Mhz', 0
+cpu_intel_05_str	db	'Intel 486SX', 0
+cpu_intel_06_str	db	'Intel 486DX2', 0
+cpu_intel_07_str	db	'Intel 486SL', 0
+cpu_intel_08_str	db	'Intel 486SX2', 0
+cpu_intel_09_str	db	'Intel 486DX2-WB', 0
+cpu_intel_10_str	db	'Intel 486DX4', 0
+cpu_intel_11_str	db	'Intel 486DX4-WB', 0
+cpu_intel_12_str	db	'Intel Pentium A-Step', 0
+cpu_intel_13_str	db	'Intel Pentium', 0
+cpu_intel_14_str	db	'Intel Pentium OverDrive', 0
+cpu_intel_15_str	db	'Intel Pentium-MMX', 0
+cpu_intel_16_str	db	'Intel Pentium Pro A-Step', 0
+cpu_intel_17_str	db	'Intel Pentium Pro', 0
+cpu_intel_18_str	db	'Intel Pentium II', 0
+
+cpu_amd_01_str		db	'AuthenticAMD', 0		
+cpu_amd_02_str		db	'Unknown AMD', 0
+cpu_amd_03_str		db	'AMD 486DX2', 0
+cpu_amd_04_str		db	'AMD 486DX2-WB', 0
+cpu_amd_05_str		db	'AMD 486DX4', 0
+cpu_amd_06_str		db	'AMD 486DX4-WB', 0
+cpu_amd_07_str		db	'AMD 5x86', 0
+cpu_amd_08_str		db	'AMD 5x86-WB', 0
+cpu_amd_09_str		db	'AMD K5-SS/A', 0
+cpu_amd_10_str		db	'AMD K5', 0
+cpu_amd_11_str		db	'AMD K6-MMX', 0
+cpu_amd_12_str		db	'AMD K6-3D', 0
+cpu_amd_13_str		db	'AMD K6-Plus', 0
+                	
+idt_0			db	? 
+cpu_idt_01_str		db	'CentaurHauls', 0		
+cpu_idt_02_str		db	'Unknown IDT', 0
+cpu_idt_03_str		db	'IDT WinChip C6', 0
+cpu_idt_04_str		db	'IDT WinChip C6-Plus', 0
+
+cpu_nexgen_01_str	db	'NexGenDriven', 0
+cpu_nexgen_02_str	db	'Unknown NexGen', 0
+cpu_nexgen_03_str	db	'NexGen Nx586', 0
+cpu_nexgen_04_str	db	'NexGen Nx586 with Nx587', 0
+cpu_nexgen_05_str	db	'NexGen Nx686', 0
+
+cpu_umc_01_str		db	'UMC UMC UMC ', 0
+cpu_umc_02_str		db	'Unknown UMC', 0
+cpu_umc_03_str		db	'UMC U5D', 0
+cpu_umc_04_str		db	'UMC U5S', 0
+
+ENDS
+
+SEGMENT	CODE16
+	ASSUME CS:CODE16, DS:DATA16, SS:STACK16, FS:CODE_R
+
+PROC	mem_lrelease
+	push	ax es
+	mov	es,ax
+	mov	ah,49h
+	int	21h			; DOS Services  ah=function 49h
+					;  release memory block, es=seg
+	pop	es ax
+	retn
+ENDP
+
+PROC	TSR_INSTCHECK
+	push	bx
+	xor	bx,bx			
+	int	2Dh			; ??INT Non-standard interrupt
+	cmp	ax, TSR_ID
+	sete	al			; Set byte if equal
+	mov	ah,0
+	pop	bx
+	retn
+ENDP
+
+PROC	TSR_UNINSTALL
+	push	bx
+	mov	bx, ACTION_UNINSTALL
+	int	2Dh			; ??INT Non-standard interrupt
+	pop	bx
+	retn
+ENDP
+
+PROC	TSR_SUSPEND
+	push	bx
+	mov	bx, ACTION_SUSPEND
+	int	2Dh			; ??INT Non-standard interrupt
+	pop	bx
+	retn
+ENDP
+
+PROC	TSR_REACTIVATE
+	push	bx
+	mov	bx, ACTION_REACTIVATE
+	int	2Dh			; ??INT Non-standard interrupt
+	pop	bx
+	retn
+ENDP
+
+	ASSUME 	DS: CODE_R
+
+PROC	TSR_HOOKINT
+	pushf				
+	pushad				
+	push	ds es
+	ASSUME	DS:CODE_R
+	cli				
+	mov	si,fs
+	mov	ds,si
+	xor	esi,esi			                                                 
+	mov	es,si                                                   	
+	mov	ecx, size intr_vec_struc                 			
+	mov	si, [vectors_hooked]		        		
+	inc	[vectors_hooked]         
+	imul	esi,ecx			           	  			
+	add	si,offset intr_vectors	        
+	mov	[(intr_vec_struc si).number],bl                  		
+	mov	[(intr_vec_struc si).new_isr],eax                		
+	xor	bh,bh			           	
+	shl	bx,2			           	
+	xchg	[es:bx],eax                        
+	mov	[(intr_vec_struc si).old_isr],eax  
+	sti				
+	pop	es ds
+	popad				
+	popf				
+	retn
+ENDP
+
+PROC	tsr_install
+	;       mov cx,OFFSET RESIDENT_END             ;
+	;	mov di,[mode_flags]		;
+	;	mov dx,KERNEL_ID                ;
+	;	mov bx,[psp_seg]                ;
+	;	mov ax,[env_seg]                ;
+	;	call tsr_install                ; Make kernel TSR.
+	cli					
+	push	ds
+	ASSUME	DS:CODE_R
+	mov	si,fs
+	mov	ds,si
+	mov	[tsr_mode_flags],di
+	mov	[tsr_kernel_id],dx
+	mov	[tsr_psp_seg],bx
+	mov	[tsr_env_seg],ax
+	xor	ax,ax				
+	mov	es,ax                   	
+	mov	eax,[es:int2dh_bios]		;get original isr 2dh
+	mov	[old_int_2dh],eax		;store away
+	mov	eax,[new_int_2dh]			;new isr 2dh
+	mov	[es:int2dh_bios],eax		;set in ivt
+	mov	ax,[tsr_env_seg]
+	call	mem_lrelease
+	pop	ds
+	mov	dx,cx
+	mov	ax,3100h
+	int	21h				; DOS Services  ah=function 31h
+	ret
+ENDP
+
+	ASSUME	DS: DATA16
+macro	exit	exit_code
+	mov	al, exit_code
+	mov	ah, 4ch
+	int	21h
+endm
 
 Proc    error_exit                      ; Exits with error message.
 	push si
@@ -1323,13 +1432,13 @@ Proc    error_exit                      ; Exits with error message.
 	ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    init
-	mov ax,cs                       ;
+	mov ax,DATA16                       ;
 	mov ds,ax                       ; Set data segment.
+	mov ax,CODE_R
+	mov fs,ax
+	xor ax,ax			;
+	mov gs,ax               	; GS = segment of IVT.
 
 	mov [psp_seg],es                ; Save PSP segment.
 	mov ax,[es:2ch]                 ;
@@ -1354,10 +1463,6 @@ Proc    init
 	ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    par_help
 	lea si,[msg_help]               ;
 	call con_writeln                ; Display help message.
@@ -1379,8 +1484,6 @@ Proc    par_help
 	exit 0
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    par_uninst
 	mov dx,KERNEL_ID                ;
 	call tsr_instcheck              ; Is kernel installed already?
@@ -1400,8 +1503,6 @@ Proc    par_uninst
 	call con_writeln                ; Print success message.
 	exit 0                          ; Quit.
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    par_on
 	mov dx,KERNEL_ID                ;
@@ -1424,8 +1525,6 @@ Proc    par_on
         exit 0                          ; Quit.
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    par_off
 	mov dx,KERNEL_ID                ;
 	call tsr_instcheck              ; Is kernel installed already?
@@ -1446,14 +1545,10 @@ Proc    par_off
         exit 0                          ; Quit.
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    par_cpu
         or [mode_flags],MODE_OPTIMIZE   ; Request CPU optimization.
         ret
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    par_apm
         or [mode_flags],MODE_APM        ;
@@ -1461,15 +1556,11 @@ Proc    par_apm
         ret
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    par_hlt
         or [mode_flags],MODE_HLT        ; 
         and [mode_flags],not MODE_APM   ; Set HLT MODE in config flags.
         ret
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    par_noforce
         or [mode_flags],MODE_NOFORCE    ; Set NO FORCE in config flags.
@@ -1479,8 +1570,6 @@ Proc    par_noforce
         ret
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    par_weakforce
         or [mode_flags],MODE_WFORCE     ; Set WEAK FORCE in config flags.
 
@@ -1489,8 +1578,6 @@ Proc    par_weakforce
         ret
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    par_strongforce
         or [mode_flags],MODE_SFORCE     ; Set STRONG FORCE in config flags.
 
@@ -1498,8 +1585,6 @@ Proc    par_strongforce
         and [mode_flags],not MODE_NOFORCE
         ret
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    read_cmdln
 	mov di,80h                      ;
@@ -1512,15 +1597,11 @@ Proc    read_cmdln
 	ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    init_modes
         test [mode_flags],MODE_NOFORCE  ; FORCE MODE disabled?
         jz short @@sfor                 ; No.
 
-        mov [byte int_xxh_forcehlt],0c3h  ; Disable FORCE HLT/APM procedure.
+        mov [byte fs:int_xxh_forcehlt],0c3h  ; Disable FORCE HLT/APM procedure overwriting it with RET. 
 
 @@sfor: test [mode_flags],MODE_SFORCE   ; STRONG FORCE MODE enabled?
         jz short @@apm                  ; No.
@@ -1595,10 +1676,6 @@ Proc    init_modes
 @@done: ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    check_system
 	call test_vcpi                  ; Running under VCPI server?
 	jne short @@dpmi                ; No.
@@ -1618,40 +1695,37 @@ Proc    check_system
 @@done: ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    hook_ints
-	xor ax,ax			;
-	mov gs,ax			; GS = segment of IVT.
-
+	push ds
+	mov ax,fs
+	mov ds,ax			; DS = CODE_R
         ;-  -  -  -  -  -  -  -  -  -  -;
+	ASSUME	DS:CODE_R
         mov eax,[gs:(10h * 4)]          ;
-        mov [dword old_int_10h],eax     ; Get and save original int 10h.
+        mov [old_int_10h],eax     ; Get and save original int 10h.
 
         mov eax,[gs:(15h * 4)]          ;
-        mov [dword old_int_15h],eax     ; Get and save original int 15h.
+        mov [old_int_15h],eax     ; Get and save original int 15h.
 
         mov eax,[gs:(14h * 4)]          ;
-        mov [dword old_int_14h],eax     ; Get and save original int 14h.
+        mov [old_int_14h],eax     ; Get and save original int 14h.
 
         mov eax,[gs:(16h * 4)]          ;
-	mov [dword old_int_16h],eax     ; Get and save original int 16h.
+	mov [old_int_16h],eax     ; Get and save original int 16h.
 
 	mov eax,[gs:(21h * 4)]          ;
-	mov [dword old_int_21h],eax     ; Get and save original int 21h.
+	mov [old_int_21h],eax     ; Get and save original int 21h.
 
         mov eax,[gs:(2fh * 4)]          ;
-        mov [dword old_int_2fh],eax     ; Get and save original int 2fh.
+        mov [old_int_2fh],eax     ; Get and save original int 2fh.
 		
         mov eax,[gs:(33h * 4)]          ;
-        mov [dword old_int_33h],eax     ; Get and save original int 33h.
+        mov [old_int_33h],eax     ; Get and save original int 33h.
         ;-  -  -  -  -  -  -  -  -  -  -;
 
         ;-  -  -  -  -  -  -  -  -  -  -;
-        mov ax,SEG int_10h_handler                  ;
-        shl eax,16                      ; High WORD of EAX = CODE16.
+        mov ax,fs                       ;
+        shl eax,16                      ; High WORD of EAX = CODE_R.
 
         mov bl,10h                      ; BL = int number of video handler.
         mov ax,offset int_10h_handler   ; EAX = new handler for int 10h.
@@ -1676,36 +1750,36 @@ Proc    hook_ints
         mov bl,2fh                      ; BL = int # of DOS Multiplex handler.
         mov ax,offset int_2fh_handler   ; EAX = new handler for int 2fh.
         call tsr_hookint                ; Hook int 2fh.
+	ASSUME	DS:DATA16
+	pop ds
 		
         test [mode_flags],MODE_MOUSE    ; Register mouse handler?
         jz short @@done
 
-        mov ax,SEG mouse_handler
+        ;-  -  -  -  -  -  -  -  -  -  -;
+	ASSUME	DS:CODE_R
+        mov ax,fs
+	mov ds,ax                       ; DS = CODE_R
         mov es,ax
         mov dx,offset mouse_handler
-        mov cx,7Fh						; Try to catch all mouse events
+        mov cx,7Fh			; Try to catch all mouse events
         mov ax,0014h
         int 33h
 
-        mov ax,SEG int_33h_handler                 ;
-        shl eax,16                      ; High WORD of EAX = CODE16.		
+        mov ax,fs                 	;
+        shl eax,16                      ; High WORD of EAX = CODE_R		
         mov bl,33h                      ; BL = int # of Mouse handler.
         mov ax,offset int_33h_handler   ; EAX = new handler for int 33h.
         call tsr_hookint                ; Hook int 33h.		
-		
+
+	ASSUME	DS:DATA16
+	pop ds
         ;-  -  -  -  -  -  -  -  -  -  -;
 @@done:		
         ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    hook_irqs
-	xor ax,ax			;
-	mov gs,ax			; GS = segment of IVT.
-
         ;-  -  -  -  -  -  -  -  -  -  -;
 @@vcpi: cmp [sys_type],SYS_VCPI         ; Running under VCPI?
         jne short @@dpmi                ; No.
@@ -1727,21 +1801,22 @@ Proc    hook_irqs
         mov cx,8                        ; CX = number of IRQ in master PIC.
         xor di,di                       ; DI = index to irq arrays.
 
-@@mstr: mov eax,[gs:(ebx * 4)]               ;
-        mov [dword old_masterirqs + di],eax  ; Get and save old IRQ handler.
-
-        mov eax,[dword new_masterirqs + di]  ; Get new handler of IRQ.
+	push ds
+        mov ax,fs
+        mov ds,ax
+@@mstr: 
+	mov eax,[gs:(ebx * 4)]               ;
+        mov [old_masterirqs + di],eax  ; Get and save old IRQ handler.
+        mov eax,[new_masterirqs + di]  	; Get new handler of IRQ.
+	
         call tsr_hookint                ; Hook IRQ.
         inc bl                          ; BL = next interrupt # for IRQ.
         add di,4                        ; DI = next IRQ number.
         loop @@mstr
         ;-  -  -  -  -  -  -  -  -  -  -;
+	pop ds
 @@done: ret
 Endp
-
-
-;----------------------------------------------------------------------------;
-
 
 Proc    detect_cpu
         lea si,[msg_cpudet]             ;
@@ -1758,8 +1833,6 @@ Proc    detect_cpu
         call con_writef                 ; New Line.
         ret
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    detect_os
         lea si,[msg_osdet]              ;
@@ -1786,8 +1859,6 @@ Proc    detect_os
 @@osok: call con_writeln                ; Print DOS type.
         ret
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    detect_apm
         lea si,[msg_apmdet]             ;
@@ -1831,8 +1902,6 @@ Proc    detect_apm
         ret
 Endp
 
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    detect_pm
         lea si,[msg_pmdet]              ;
         call con_writef                 ; Print message for PM detection.
@@ -1849,8 +1918,6 @@ Proc    detect_pm
 @@pmok: call con_writeln                ; Print PM system.
         ret
 Endp
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
 
 Proc    detect_mouse
         push es
@@ -1889,9 +1956,6 @@ Proc    detect_mouse
         ret
 Endp
 
-
-;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ;
-
 Proc    info_detect
         lea si,[msg_detect]             ;
         call con_writeln                ; Print detection message.
@@ -1904,14 +1968,10 @@ Proc    info_detect
         ret
 Endp
 
-
-;----------------------------------------------------------------------------;
-
-
 Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
-
+	mov di,[mode_flags]		;
 RESIDENT_SIZE  = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
         mov cx,RESIDENT_SIZE
 	mov dx,KERNEL_ID                ;
@@ -1919,10 +1979,6 @@ RESIDENT_SIZE  = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
 	mov ax,[env_seg]                ;
 	call tsr_install                ; Make kernel TSR.
 Endp
-
-
-;----------------------------------------------------------------------------;
-
 
 Proc    main
 	call init                       ; Do general startup work.
@@ -1983,8 +2039,6 @@ locloop_106:
 	retn
 ENDP
 
-Align	16
-
 PROC	LOCAL_WRITESTR
 	push	ax cx si
 	mov	cx,0FFh
@@ -2028,8 +2082,6 @@ PROC	LOCAL_WRITECH
 	retn
 ENDP
 
-hex_table	db	'0123456789ABCDEF'
-
 PROC	LOCAL_WRITEDEC
 	push	eax ebx cx edx si
 	mov	ebx, 10
@@ -2046,7 +2098,7 @@ loc_109:
 
 locloop_110:
 	pop	bx
-	mov	al,[cs:hex_table+bx]
+	mov	al,[hex_table+bx]
 	call	LOCAL_WRITECH
 	loop	locloop_110		
 
@@ -2086,8 +2138,6 @@ PROC	CON_WRITEDEC
 	retn
 ENDP
 
-Align	16
-        
 PROC	TOLOWER
 	cmp	al,41h			; 'A'
 	jb	short loc_ret_111	
@@ -2115,8 +2165,8 @@ PROC	LOCAL_SWITCH
 	w2	dw 	0
 loc_113:
 	push	dx si di
-	mov	[word ptr ds:w1],0
-	mov	[word ptr ds:w2],0
+	mov	[word ptr w1],0
+	mov	[word ptr w2],0
 	mov	dh,al
 	xor	ah,ah			
 	xor	bl,bl			
@@ -2150,8 +2200,8 @@ loc_117:
 loc_118:
 	cmp	dh,bl
 	jne	short loc_119		
-	mov	[word ptr ds:w1],si
-	mov	[byte ptr ds:w2],ah
+	mov	[word ptr w1],si
+	mov	[byte ptr w2],ah
 loc_119:
 	inc	bl
 	mov	ah,1
@@ -2161,18 +2211,18 @@ loc_120:
 
 	cmp	dl,2
 	je	short loc_121		
-	cmp	[word ptr ds:w2],0
+	cmp	[word ptr w2],0
 	jne	short loc_122		
-	mov	[word ptr ds:w1],si
-	mov	[byte ptr ds:w2],ah
+	mov	[word ptr w1],si
+	mov	[byte ptr w2],ah
 	jmp	short loc_122
 loc_121:
 	stc				
 	jmp	short loc_123
 loc_122:
 	mov	ah,bl
-	mov	bx,[word ptr ds:w1]
-	mov	cx,[word ptr ds:w2]
+	mov	bx,[word ptr w1]
+	mov	cx,[word ptr w2]
 	mov	al,dh
 	clc				
 loc_123:
@@ -2252,9 +2302,6 @@ loc_132:
 	retn
 ENDP
 
-data_148	dw	4 dup (0)
-		db	0
-
 PROC	TEST_CPU
 ;	cpu types
 ;	0	8086	
@@ -2325,18 +2372,15 @@ loc_133:
 ENDP
 
 PROC	TEST_FPU
-	jmp	short loc_134
-	w3	dw	0       
-loc_134:
 	push	bx ax
 	fninit				; Initialize math uP
-	mov	[ds:w3],5A5Ah
-	fnstsw	[ds:w3]			; Store status word
+	mov	[fpu_check],5A5Ah
+	fnstsw	[fpu_check]			; Store status word
 	mov	bl,0
-	cmp	[ds:w3],0
+	cmp	[fpu_check],0
 	jne	short loc_135		
-	fnstcw	[ds:w3]			; Store control word
-	mov	ax, [ds:w3]
+	fnstcw	[fpu_check]			; Store control word
+	mov	ax,[fpu_check]
 	and	ax,103Fh
 	cmp	ax,3Fh
 	mov	bl,0
@@ -2351,8 +2395,8 @@ loc_134:
 	fld	st			; Push onto stack
 	fchs				; Change sign in st
 	fcompp				; Compare st & pop 2
-	fstsw	[ds:w3]			; Store status word
-	mov	ax, [ds:w3]
+	fstsw	[fpu_check]			; Store status word
+	mov	ax,[fpu_check]
 	mov	bl,2
 	sahf				; Store ah into flags
 	jz	short loc_135		
@@ -2410,10 +2454,6 @@ PROC	IRQ_GETPIC
 	retn
 ENDP
 
-Align	4
-
-v86_callback	dd	0
-
 PROC	WIN386_V86_CALLBACK_INIT
 	pushad				
 	push	ds es
@@ -2428,13 +2468,13 @@ PROC	WIN386_V86_CALLBACK_INIT
 	int	2Fh			; Windows init broadcast
 	test	cx,cx
 	jnz	short loc_138		
-	mov	[word ptr cs:v86_callback],si
-	mov	[word ptr cs:v86_callback+2],ds
-	cmp	[dword ptr cs:v86_callback],0
+	mov	[ word ptr v86_callback],si
+	mov	[ word ptr v86_callback+2],ds
+	cmp	[dword ptr v86_callback],0
 	je	short loc_138		
 	cli				
 	xor	ax,ax			
-	call	[dword ptr cs:v86_callback]
+	call	[dword ptr v86_callback]
 	jc	short loc_138		
 	clc				
 	jmp	short loc_139
@@ -2452,11 +2492,11 @@ ENDP
 PROC	WIN386_V86_CALLBACK_EXIT
 	pushad				
 	push	ds es
-	cmp	[dword ptr cs:v86_callback],0
+	cmp	[dword ptr v86_callback],0
 	je	short loc_140		
 	cli				
 	mov	ax,1
-	call	[dword ptr cs:v86_callback]
+	call	[dword ptr v86_callback]
 	mov	ax,1606h
 	xor	dx,dx			
 	int	2Fh			; Windows exit broadcast
@@ -2488,18 +2528,6 @@ PROC	clear_if_zero
 loc_ret_141:
 	retn
 ENDP
-		db	11 dup (0)
-cpu_name	db	49 dup (0)			
-cpuid_str	db    	13 dup (0)			
-cpu_stepping	db	0                      		
-cpu_family	db	0				
-cpu_model	db	0				
-cpu_type        db	0				
-cpu_features   	dd	0				
-		dd	0
-highest_basic_cpuid		dd 	0		
-highest_extended_cpuid		dd      0		
-cpu_failed_str	db	'CPU detection failed.',0
 
 PROC	is_486sx					
 ;sub_57		proc	near
@@ -2574,7 +2602,7 @@ PROC	get_basic_cpu_info
 	pushad				
 	mov	eax,1
 	cpuid				
-	mov	bx,ax
+	mov	ebx,eax
 	and	al,0Fh
 	mov	[cpu_stepping],al 	
 	mov	al,bl
@@ -2584,8 +2612,16 @@ PROC	get_basic_cpu_info
 	and	ah,0Fh   	
 	mov	[cpu_family],ah     
 	mov	ah,bh
-	shr	ah,4			
-	mov	[cpu_type],ah 	
+	shr	ah,4			                                       
+	mov	[cpu_type],ah 	                                               
+	mov	eax,ebx
+	shr	eax,16
+	and	al, 0fh
+	shl	al,4
+	add 	[cpu_model],al		;add extended model
+	mov	eax,ebx
+	shr	eax,20
+	add	[cpu_family],al		;add extended family
 	mov	[cpu_features],edx   	
 	popad				
 	retn
@@ -2596,7 +2632,7 @@ PROC  	get_extended_cpuid
 	push	ebx ecx edx
 	mov	eax,80000000h
 	cpuid				
-	mov	[highest_extended_cpuid],eax
+	mov	[highest_ext_cpuid],eax
 	pop	edx ecx ebx
 	retn
 ENDP
@@ -2626,11 +2662,6 @@ PROC 	get_cpu_brandstring
 	popad				
 	retn
 ENDP
-
-cpu_386_str	db	'Standard 80386', 0
-cpu_386fpu_str	db	'Standard 80386 with 80387', 0
-cpu_486sx_str	db	'Standard 80486SX', 0
-cpu_486dx_str	db	'Standard 80486DX', 0
 
 PROC	get_cpus
 ;sub_63		proc	near
@@ -2688,39 +2719,6 @@ loc_147:
 	popad				
 	retn
 ENDP
-
-cyrix_0		db	00h
-cyrix_1		db 	00h		;1b37
-cyrix_2		db	00h         	;1bc8
-cpu_cyrix_01_str	db	'CyrixInstead', 0
-cpu_cyrix_02_str	db	'Unknown Cyrix', 0
-cpu_cyrix_03_str	db	'Cyrix 486SLC', 0
-cpu_cyrix_04_str	db	'Cyrix 486DLC', 0
-cpu_cyrix_05_str	db	'Cyrix 486SLC2', 0
-cpu_cyrix_06_str	db	'Cyrix 486DLC2', 0
-cpu_cyrix_07_str	db	'Cyrix 486SRx', 0
-cpu_cyrix_08_str	db	'Cyrix 486DRx', 0
-cpu_cyrix_09_str	db	'Cyrix 486SRx2', 0
-cpu_cyrix_10_str	db	'Cyrix 486DRx2', 0
-cpu_cyrix_11_str	db	'Cyrix 486SRu', 0
-cpu_cyrix_12_str	db	'Cyrix 486DRu', 0
-cpu_cyrix_13_str	db	'Cyrix 486SRu2', 0
-cpu_cyrix_14_str	db	'Cyrix 486DRu2', 0
-cpu_cyrix_15_str	db	'Cyrix 486S', 0
-cpu_cyrix_16_str	db	'Cyrix 486S2', 0
-cpu_cyrix_17_str	db	'Cyrix 486Se', 0
-cpu_cyrix_18_str	db	'Cyrix 486S2e', 0
-cpu_cyrix_19_str	db	'Cyrix 486DX', 0
-cpu_cyrix_20_str	db	'Cyrix 486DX2', 0
-cpu_cyrix_21_str	db	'Cyrix 486SLC/DLC', 0
-cpu_cyrix_22_str	db	'Cyrix 486Sa', 0
-cpu_cyrix_23_str	db	'Cyrix 486DX4', 0
-cpu_cyrix_24_str	db	'Cyrix 5x86', 0
-cpu_cyrix_25_str	db	'Cyrix 6x86', 0
-cpu_cyrix_26_str	db	'Cyrix 6x86L', 0
-cpu_cyrix_27_str	db	'Cyrix 6x86MX', 0
-cpu_cyrix_28_str	db	'Cyrix MediaGX', 0
-cpu_cyrix_29_str	db	'Cyrix GXm', 0
             
 PROC	cyrix_io_port_1
 ;sub_65		proc	near
@@ -3222,26 +3220,6 @@ loc_185:
 	retn
 ENDP
 
-intel_0			db	00h				
-cpu_intel_01_str	db	'GenuineIntel', 0
-cpu_intel_02_str	db	'Unknown Intel', 0
-cpu_intel_03_str	db	'Intel 486DX at 25/33 Mhz', 0
-cpu_intel_04_str	db	'Intel 486DX at 50 Mhz', 0
-cpu_intel_05_str	db	'Intel 486SX', 0
-cpu_intel_06_str	db	'Intel 486DX2', 0
-cpu_intel_07_str	db	'Intel 486SL', 0
-cpu_intel_08_str	db	'Intel 486SX2', 0
-cpu_intel_09_str	db	'Intel 486DX2-WB', 0
-cpu_intel_10_str	db	'Intel 486DX4', 0
-cpu_intel_11_str	db	'Intel 486DX4-WB', 0
-cpu_intel_12_str	db	'Intel Pentium A-Step', 0
-cpu_intel_13_str	db	'Intel Pentium', 0
-cpu_intel_14_str	db	'Intel Pentium OverDrive', 0
-cpu_intel_15_str	db	'Intel Pentium-MMX', 0
-cpu_intel_16_str	db	'Intel Pentium Pro A-Step', 0
-cpu_intel_17_str	db	'Intel Pentium Pro', 0
-cpu_intel_18_str	db	'Intel Pentium II', 0
-
 PROC	get_cpu_intel_1
 ;sub_79		proc	near
 	pusha				
@@ -3417,19 +3395,13 @@ loc_ret_198:
 	retn
 ENDP
 
-PROC	get_cpu_intel_5
-;sub_85		proc	near
-	call	get_cpu_intel_4
-	retn
-ENDP
-
 PROC	test_cpu_intel
 ;sub_86		proc	near
 	pusha				
 	call	get_cpu_intel_3
 	test	[cpu_features],20h
 	jz	short loc_202		
-	call	get_cpu_intel_5
+	call	get_cpu_intel_4
 	cmp	[byte ptr ds:intel_0],4
 	jb	short loc_202		
 	jz	short loc_199		
@@ -3459,20 +3431,6 @@ loc_203:
 	retn
 ENDP
 	nop
-
-cpu_amd_01_str	db	'AuthenticAMD', 0		
-cpu_amd_02_str	db	'Unknown AMD', 0
-cpu_amd_03_str	db	'AMD 486DX2', 0
-cpu_amd_04_str	db	'AMD 486DX2-WB', 0
-cpu_amd_05_str	db	'AMD 486DX4', 0
-cpu_amd_06_str	db	'AMD 486DX4-WB', 0
-cpu_amd_07_str	db	'AMD 5x86', 0
-cpu_amd_08_str	db	'AMD 5x86-WB', 0
-cpu_amd_09_str	db	'AMD K5-SS/A', 0
-cpu_amd_10_str	db	'AMD K5', 0
-cpu_amd_11_str	db	'AMD K6-MMX', 0
-cpu_amd_12_str	db	'AMD K6-3D', 0
-cpu_amd_13_str	db	'AMD K6-Plus', 0
 
 PROC get_cpu_amd_3
 ;sub_87		proc	near
@@ -3580,12 +3538,6 @@ PROC	set_clc_1
 	retn
 ENDP
 
-idt_0	db	? 
-cpu_idt_01_str	db	'CentaurHauls', 0		
-cpu_idt_02_str	db	'Unknown IDT', 0
-cpu_idt_03_str	db	'IDT WinChip C6', 0
-cpu_idt_04_str	db	'IDT WinChip C6-Plus', 0
-
 PROC	get_cpu_Centaur_1
 ;sub_92		proc	near
 	pusha				
@@ -3674,12 +3626,6 @@ loc_221:
 	retn
 ENDP
 
-cpu_nexgen_01_str	db	'NexGenDriven', 0
-cpu_nexgen_02_str	db	'Unknown NexGen', 0
-cpu_nexgen_03_str	db	'NexGen Nx586', 0
-cpu_nexgen_04_str	db	'NexGen Nx586 with Nx587', 0
-cpu_nexgen_05_str	db	'NexGen Nx686', 0
-
 PROC	get_cpu_nexgen_1
 ;sub_97		proc	near
 	pusha				
@@ -3742,11 +3688,6 @@ loc_228:
 	retn
 ENDP
 
-cpu_umc_01_str	db	'UMC UMC UMC ', 0
-cpu_umc_02_str	db	'Unknown UMC', 0
-cpu_umc_03_str	db	'UMC U5D', 0
-cpu_umc_04_str	db	'UMC U5S', 0
-
 PROC	get_cpu_intel_6
 ;sub_99		proc	near
 	pusha				
@@ -3801,7 +3742,7 @@ ENDP
 PROC	cpu_getname
 ;sub_101		proc	near
 	push	ax es
-	mov	ax,cs
+	mov	ax,ds
 	mov	es,ax
 	call	get_cpu_intel_1
 	jz	short loc_236		
@@ -3819,7 +3760,7 @@ PROC	cpu_getname
 	jz	short loc_242		
 	jmp	short loc_244
 loc_236:
-	call	get_cpu_intel_5
+	call	get_cpu_intel_4
 	jmp	short loc_243
 loc_237:
 	call	get_cpu_amd_5
@@ -3853,12 +3794,10 @@ ENDP
 
 PROC	cpu_optimize
 ;sub_102		proc	near
-	jmp	short loc_246
-in_v86_call	db	0
-loc_246:
-	push	ax es
+	push	ax es si			
 	cli				
-	mov	ax,cs
+	xor	si, si
+	mov	ax,ds
 	mov	es,ax
 	call	TEST_V86
 	jnz	short loc_247		
@@ -3866,7 +3805,7 @@ loc_246:
 	jz	short loc_252		
 	call	WIN386_V86_CALLBACK_INIT
 	jc	short loc_252		
-	mov	[byte ptr ds:in_v86_call],1
+	mov	si,1
 loc_247:
 	call	initial_cpu_check
 	jz	short loc_248		
@@ -3894,24 +3833,21 @@ loc_252:
 	stc				
 loc_253:
 	pushf				
-	cmp	[byte ptr ds:in_v86_call],1
+	cmp	si,1
 	jne	short loc_254		
 	call	WIN386_V86_CALLBACK_EXIT
-	mov	[byte ptr ds:in_v86_call],0
 loc_254:
 	popf				
-	pop	es ax
+	pop	si es ax
 	retn
 ENDP
 
 PROC	cpu_powersave
 ;sub_103		proc	near
-	jmp	short loc_255	
-	in_v86_call2	db	00h
-loc_255:
-	push	ax es
+	push	ax es si
 	cli				
-	mov	ax,cs
+	xor	si,si
+	mov	ax,ds
 	mov	es,ax
 	call	TEST_V86
 	jnz	short loc_256		
@@ -3919,7 +3855,7 @@ loc_255:
 	jz	short loc_261		
 	call	WIN386_V86_CALLBACK_INIT
 	jc	short loc_261		
-	mov	[byte ptr ds:in_v86_call2],1		
+	mov	si,1		
 loc_256:
 	call	get_cpu_intel_1
 	jz	short loc_257		
@@ -3947,13 +3883,12 @@ loc_261:
 	stc				
 loc_262:
 	pushf				
-	cmp	[byte ptr ds:in_v86_call2],1
+	cmp	si,1
 	jne	short loc_263		
 	call	WIN386_V86_CALLBACK_EXIT
-	mov	[byte ptr ds:in_v86_call2],0
 loc_263:
 	popf				
-	pop	es ax
+	pop	si es ax
 	retn
 ENDP
 
