@@ -28,15 +28,13 @@ ideal                                   ; Yep, this prog is TASM 4.0 coded!
 
 SEGMENT	CODE_R	PARA PUBLIC  USE16 'CODE'
 ENDS 
-SEGMENT	DATA16	DWORD PUBLIC  USE16 'DATA'
-ENDS
 SEGMENT	CODE16	PARA PUBLIC  USE16 'CODE'
+ENDS
+SEGMENT	DATA16	DWORD PUBLIC  USE16 'DATA'
 ENDS
 
 SEGMENT	CODE_R
 	ASSUME CS: CODE_R, DS:NOTHING
-
-RESIDENT_START:
 
 struc 	intr_vec_struc                                                             	
 	number  db  ?                                                              	
@@ -1084,7 +1082,7 @@ Proc    irq_07_handler                  ; Handler for IRQ 7.
         jmp [dword cs:old_masterirqs + 28] ; Chain to old interrupt handler.
 Endp
 
-RESIDENT_STOP:
+RESIDENT_END:
 
 ENDS
 
@@ -1972,9 +1970,14 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 	mov di,[mode_flags]		;
-RESIDENT_SIZE  = (RESIDENT_STOP - RESIDENT_START + 0FH) SHR 4
-        mov cx,RESIDENT_SIZE
-	mov dx,KERNEL_ID                ;
+        mov cx,offset RESIDENT_END
+	add cx, 0fh                     ;
+	shr cx, 4                       ; resident part in paragraphs
+	mov bx,[psp_seg]                ; add PSP
+	mov ax,cs                       ;    ,,
+	sub ax,bx                       ;    ,,
+	add cx,ax			;    ,,
+	mov dx,KERNEL_ID                ;    
 	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
 	call tsr_install                ; Make kernel TSR.
@@ -3895,7 +3898,7 @@ ENDP
 ENDS
 
 SEGMENT	STACK16	PARA STACK 'STACK'
-        db 2000 dup (?)                 ; Stack for initialization part.
+        db 2048 dup (?)                 ; Stack for initialization part.
 ENDS
 
 END	main
