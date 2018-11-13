@@ -1103,11 +1103,11 @@ CR		= 13
 LF		= 10
 NL		equ <CR,LF>
 
-psp_seg         dw 0
-env_seg         dw 0
+psp_seg         dw ?
+env_seg         dw ?
                      
-dos_version     dw 0                    ; MS-DOS version.
-apm_version     dw 0                    ; Advanced Power Management version.
+dos_version     dw ?                    ; MS-DOS version.
+apm_version     dw ?                    ; Advanced Power Management version.
 apm_state       db OFF                  ; State of APM (enabled, disabled).
                     
 sys_type        db SYS_RAW              ; Type of system (Raw, VCPI, DPMI).
@@ -1203,11 +1203,11 @@ fpu_check		dw	0
 
 cpu_name		db	49 dup (0)			
 cpuid_str		db    	13 dup (0)			
-cpu_stepping		db	0                      		
-cpu_family		db	0				
-cpu_model		db	0				
-cpu_type        	db	0				
-cpu_features   		dd	0				
+cpu_stepping		db	?                      		
+cpu_family		db	?				
+cpu_model		db	?				
+cpu_type        	db	?				
+cpu_features   		dd	?				
 
 highest_basic_cpuid	dd 	0		
 highest_ext_cpuid	dd      0		
@@ -1358,7 +1358,6 @@ PROC	TSR_HOOKINT
 	pushf				
 	pushad				
 	push	ds es
-	ASSUME	DS:CODE_R
 	cli				
 	mov	si,fs
 	mov	ds,si
@@ -1382,6 +1381,13 @@ PROC	TSR_HOOKINT
 	retn
 ENDP
 
+macro	exit	exit_code
+	mov	al, exit_code
+	mov	ah, 4ch
+	int	21h
+endm
+
+	ASSUME	DS:CODE_R
 PROC	tsr_install
 	;       mov cx,OFFSET RESIDENT_END             ;
 	;	mov di,[mode_flags]		;
@@ -1391,7 +1397,6 @@ PROC	tsr_install
 	;	call tsr_install                ; Make kernel TSR.
 	cli					
 	push	ds
-	ASSUME	DS:CODE_R
 	mov	si,fs
 	mov	ds,si
 	mov	[tsr_mode_flags],di
@@ -1410,17 +1415,13 @@ PROC	tsr_install
 	mov	dx,cx
 	mov	ax,3100h
 	int	21h				; DOS Services  ah=function 31h
+	exit	1
 	ret
 ENDP
 
 	ASSUME	DS: DATA16
-macro	exit	exit_code
-	mov	al, exit_code
-	mov	ah, 4ch
-	int	21h
-endm
 
-Proc    error_exit                      ; Exits with error message.
+error_exit:                      	; Exits with error message.
 	push si
 	lea si,[err_str]                ;
 	call con_writef                 ; Print "[FATAL]: "
@@ -1429,8 +1430,6 @@ Proc    error_exit                      ; Exits with error message.
 	sti
 	call con_writeln                ; Print error message.
 	exit 0                          ; Off we go...
-	ret
-Endp
 
 Proc    init
 	mov ax,DATA16                       ;
@@ -1551,19 +1550,19 @@ Proc    par_cpu
 Endp
 
 Proc    par_apm
-        or [mode_flags],MODE_APM        ;
+        or  [mode_flags],MODE_APM        ;
         and [mode_flags],not MODE_HLT   ; Set APM MODE in config flags.
         ret
 Endp
 
 Proc    par_hlt
-        or [mode_flags],MODE_HLT        ; 
+        or  [mode_flags],MODE_HLT        ; 
         and [mode_flags],not MODE_APM   ; Set HLT MODE in config flags.
         ret
 Endp
 
 Proc    par_noforce
-        or [mode_flags],MODE_NOFORCE    ; Set NO FORCE in config flags.
+        or  [mode_flags],MODE_NOFORCE    ; Set NO FORCE in config flags.
 
         and [mode_flags],not MODE_WFORCE
         and [mode_flags],not MODE_SFORCE
@@ -1571,7 +1570,7 @@ Proc    par_noforce
 Endp
 
 Proc    par_weakforce
-        or [mode_flags],MODE_WFORCE     ; Set WEAK FORCE in config flags.
+        or  [mode_flags],MODE_WFORCE     ; Set WEAK FORCE in config flags.
 
         and [mode_flags],not MODE_SFORCE
         and [mode_flags],not MODE_NOFORCE
@@ -1579,7 +1578,7 @@ Proc    par_weakforce
 Endp
 
 Proc    par_strongforce
-        or [mode_flags],MODE_SFORCE     ; Set STRONG FORCE in config flags.
+        or  [mode_flags],MODE_SFORCE     ; Set STRONG FORCE in config flags.
 
         and [mode_flags],not MODE_WFORCE
         and [mode_flags],not MODE_NOFORCE
@@ -1758,6 +1757,7 @@ Proc    hook_ints
 
         ;-  -  -  -  -  -  -  -  -  -  -;
 	ASSUME	DS:CODE_R
+	push ds
         mov ax,fs
 	mov ds,ax                       ; DS = CODE_R
         mov es,ax
@@ -1800,7 +1800,7 @@ Proc    hook_irqs
 @@hook: movzx ebx,bl                    ; EBX = base int # for master PIC.
         mov cx,8                        ; CX = number of IRQ in master PIC.
         xor di,di                       ; DI = index to irq arrays.
-
+	ASSUME	DS:CODE_R
 	push ds
         mov ax,fs
         mov ds,ax
@@ -1814,6 +1814,7 @@ Proc    hook_irqs
         add di,4                        ; DI = next IRQ number.
         loop @@mstr
         ;-  -  -  -  -  -  -  -  -  -  -;
+	ASSUME	DS:DATA16
 	pop ds
 @@done: ret
 Endp
@@ -1931,10 +1932,10 @@ Proc    detect_mouse
         test ebx, ebx
         jz short @@no_mouse
 
-        ror ebx,	16
+        ror ebx,16
         mov es,bx
         rol ebx,16
-        mov al,[byte ptr es:bx]
+        mov al,[es:bx]
         cmp al, 0CFh			; Check for IRET in the current 33h handler
         jz short @@no_mouse
 
@@ -1972,14 +1973,14 @@ Proc    install_kernel
 	lea si,[msg_inst]               ;
 	call con_writeln                ; Print success message.
 	mov di,[mode_flags]		;
-        mov cx,cs			;///
+;        mov cx,cs			;///
         mov cx,CODE_E                  	;///
-;	mov bx,[psp_seg]                ; add PSP
-	mov ah,62h
-	int 21h
+	mov bx,[psp_seg]                ; add PSP
+;	mov ah,62h
+;	int 21h
 	sub cx,bx                       ;    ,,
 	mov dx,KERNEL_ID                ;    
-	mov bx,[psp_seg]                ;
+;	mov bx,[psp_seg]                ;
 	mov ax,[env_seg]                ;
 	call tsr_install                ; Make kernel TSR.
 Endp
@@ -2160,7 +2161,7 @@ PROC	isspace
 	je	short loc_ret_112	
 
 loc_ret_112:
-		retn
+	retn
 ENDP
 
 PROC	LOCAL_SWITCH
@@ -2169,8 +2170,8 @@ PROC	LOCAL_SWITCH
 	w2	dw 	0
 loc_113:
 	push	dx si di
-	mov	[word ptr w1],0
-	mov	[word ptr w2],0
+	mov	[w1],0
+	mov	[w2],0
 	mov	dh,al
 	xor	ah,ah			
 	xor	bl,bl			
@@ -2964,7 +2965,7 @@ PROC	get_cpu_cyrix_2
 	pusha				
 	call	get_cpu_cyrix
 	mov	al,[cyrix_1]
-	mov	[byte cyrix_0],1	
+	mov	[cyrix_0],1	
 	mov	si,offset cpu_cyrix_03_str
 	cmp	al,0
 	je	loc_169			
@@ -3028,7 +3029,7 @@ PROC	get_cpu_cyrix_2
 	mov	si,offset cpu_cyrix_23_str
 	cmp	al,1Fh
 	je	short loc_169		
-	mov	[byte cyrix_0],2	
+	mov	[cyrix_0],2	
 	mov	si,offset cpu_cyrix_24_str
 	mov	dl,al
 	sub	dl,28h			
@@ -3038,7 +3039,7 @@ PROC	get_cpu_cyrix_2
 	sub	dl,30h			
 	cmp	dl,7
 	jbe	short loc_167		 
-	mov	[byte cyrix_0],5	
+	mov	[cyrix_0],5	
 	mov	si,offset cpu_cyrix_27_str
 	mov	dl,al
 	sub	dl,50h			
@@ -3048,25 +3049,25 @@ PROC	get_cpu_cyrix_2
 	sub	dl,40h			
 	cmp	dl,7
 	jbe	short loc_168		 
-	mov	[byte cyrix_0],0FFh	
+	mov	[cyrix_0],0FFh	
 	mov	si,offset cpu_cyrix_02_str
 	jmp	short loc_169
 loc_167:
-	mov	[byte cyrix_0],3	
+	mov	[cyrix_0],3	
 	mov	si,offset cpu_cyrix_25_str
-	cmp	[byte cyrix_2],21h	
+	cmp	[cyrix_2],21h	
 	jbe	short loc_169		 
-	mov	[byte cyrix_0],4	
+	mov	[cyrix_0],4	
 	mov	si,offset cpu_cyrix_26_str
 	jmp	short loc_169
 loc_168:
-	mov	[byte cyrix_0],6	
+	mov	[cyrix_0],6	
 	mov	si,offset cpu_cyrix_28_str
 	mov	al,[cyrix_2]
 	and	al,0F0h
 	cmp	al,30h			
 	jne	short loc_169		
-	mov	[byte cyrix_0],7	
+	mov	[cyrix_0],7	
 	mov	si, offset cpu_cyrix_29_str	
 	jmp	short loc_169
 loc_169:
@@ -3137,21 +3138,21 @@ PROC	test_cpu_cyrix_2
 ;sub_77		proc	near
 	pusha				
 	call	test_cpu_cyrix
-	cmp	[byte cyrix_0],0FFh	
+	cmp	[cyrix_0],0FFh	
 	je	short loc_181		
-	cmp	[byte cyrix_0],2	
+	cmp	[cyrix_0],2	
 	jb	short loc_181		
 	mov	al,0C3h
 	mov	bl,10h
 	call	get_cyrix_1
 	jc	short loc_181		
-	cmp	[byte cyrix_0],2	
+	cmp	[cyrix_0],2	
 	je	short loc_177		
-	cmp	[byte cyrix_0],3	
+	cmp	[cyrix_0],3	
 	je	short loc_178		
-	cmp	[byte cyrix_0],4	
+	cmp	[cyrix_0],4	
 	je	short loc_178		
-	cmp	[byte cyrix_0],5	
+	cmp	[cyrix_0],5	
 	je	short loc_179		
 	jmp	short loc_181
 loc_177:
@@ -3198,16 +3199,16 @@ PROC	test_cpu_cyrix_3
 ;sub_78		proc	near
 	pusha				
 	call	test_cpu_cyrix
-	cmp	[byte cyrix_0],0FFh	
+	cmp	[cyrix_0],0FFh	
 	je	short loc_184		
-	cmp	[byte cyrix_0],2	
+	cmp	[cyrix_0],2	
 	jb	short loc_184		
 	jz	short loc_183		
-	cmp	[byte cyrix_0],3	
+	cmp	[cyrix_0],3	
 	je	short loc_183		
-	cmp	[byte cyrix_0],4	
+	cmp	[cyrix_0],4	
 	je	short loc_183		
-	cmp	[byte cyrix_0],5	
+	cmp	[cyrix_0],5	
 	je	short loc_183		
 	jmp	short loc_184
 loc_183:
@@ -3406,10 +3407,10 @@ PROC	test_cpu_intel
 	test	[cpu_features],20h
 	jz	short loc_202		
 	call	get_cpu_intel_4
-	cmp	[byte ptr ds:intel_0],4
+	cmp	[intel_0],4
 	jb	short loc_202		
 	jz	short loc_199		
-	cmp	[byte ptr ds:intel_0],5
+	cmp	[intel_0],5
 	je	short loc_200		
 	jnz	short loc_202		
 loc_199:
