@@ -94,10 +94,10 @@ Ends
 Align 4
 
 quirk_table     qk_item <"NC.EXE", 1, 0>
-                 qk_hook <int_21h_fntable + 2ch * 2, int_xxh_forcehlt, int_xxh_zerocount>
+                qk_hook <int_21h_fntable + 2ch * 2, int_xxh_forcehlt, int_xxh_zerocount>
                 qk_item <"SCANDISK.EXE", 1, 0>
-                 qk_hook <int_21h_fntable + 0bh * 2, int_xxh_zerocount, int_xxh_forcehlt>
-                QK_ITEMS = 2
+                qk_hook <int_21h_fntable + 0bh * 2, int_xxh_zerocount, int_xxh_forcehlt>
+QK_ITEMS 	= 2
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
@@ -161,7 +161,7 @@ int_21h_fntable dw offset int_xxh_zerocount    	; FN 00h: Terminate.
                 dw offset int_21h_fn4ch        	; FN 4ch: Terminate child process.
 
 child_name      db 13 dup (0)           	; Name of the child to be executed.
-
+exec_calls      dw 200                  	; Count of DOS FN 4bh calls.
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
 ACTION_TEST		= 0
@@ -176,8 +176,16 @@ tsr_env_seg	dw	?
 tsr_mode_flags  dw 	?
 INT2DH_BIOS	= 2dh * 4
 
-exec_calls      dw 200                  	; Count of DOS FN 4bh calls.
 new_int_2dh	dd	isr_2dh			
+
+INT_2DH_TOPFN   = 03h                   	; Highest FN that is handled.
+
+Align 4
+
+int_2dh_fntable dw offset int_2dh_test         ; FN 00h:  Test presence
+                dw offset int_2dh_uninstall    ; FN 01h:  uninstall TSR 
+                dw offset int_2dh_suspend      ; FN 02h:  suspend TSR   
+                dw offset int_2dh_reactivate   ; FN 03h:  reactivate TSR
 
 ;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
 
@@ -254,6 +262,22 @@ macro	ds_iret
 	pop	ds
 	iret
 endm
+
+PROC	int_2dh_test       
+
+ENDP
+
+PROC	int_2dh_uninstall  
+
+ENDP
+
+PROC	int_2dh_suspend    
+
+ENDP
+
+PROC	int_2dh_reactivate 
+
+ENDP
 
 ALIGN	4
 	
@@ -491,6 +515,154 @@ Proc    int_xxh_skip                    ; Skip ALL FORCE counter updates.
 Endp
 
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 10H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+
+Align 4
+
+Proc    int_10h_handler                 ; BIOS video functions handler.
+	ds_entry
+        mov [int_xxh_fcount],0       	; Zero int xxh force counter.
+        ds_jmp old_int_10h      	; Chain to old interrupt handler.
+Endp
+
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 14H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+
+Proc    int_14h_normalhlt
+	sti                             ; Enable IRQs for following HLT.
+
+        test [tsr_mode_flags],MODE_APM  ; APM usage requested?
+        jnz short @@apml                ; Yes.
+
+@@stdl: hlt                             ; Enter power saving mode.
+        mov ah,03h                      ; Int 14h FN: Get serial port status.
+        pushf                           ;
+        call [dword old_int_14h]        ; Simulate int 14h without reentrancy.
+
+        test ah,1                       ; Is data ready?
+        jz @@stdl                       ; No, continue loop.
+        jmp short @@done                ; Finish.
+
+@@apml: mov ax,5305h                    ;
+        pushf                           ;
+        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+
+        mov ah,03h                      ; Int 14h FN: Get serial port status.
+        pushf                           ;
+        call [dword old_int_14h]        ; Simulate int 14h without reentrancy.
+
+        test ah,1                       ; Is data ready?
+        jz @@apml                       ; No, continue loop.
+@@done: ret
+Endp
+
+;----------------------------------------------------------------------------;
+
+Align 4
+
+Proc    int_14h_handler                 ; BIOS serial I/O handler.
+	ds_entry
+        push ax bx
+
+        cmp ah,INT_14H_TOPFN            ; FN irrelevant for our handler?
+        ja short @@old                  ; Yes, zero force counter and chain.
+
+        xor bh,bh                       ;
+        mov bl,ah                       ;
+        add bx,bx                       ; BX = index to int_14h_fntable.
+        add bx,offset int_14h_fntable   ; BX = offset of handler.
+
+        call [word bx]                  ; Call the appropriate FN handler.
+        jmp short @@oldn                ; Chain without zeroing force count.
+
+@@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+
+@@oldn: pop bx ax
+        ds_jmp old_int_14h      	; Chain to old interrupt handler.
+Endp
+
+;----------------------------------------------------------------------------;
+;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 15H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+
+Align 4
+
+Proc    int_15h_handler                 ; BIOS AT Services handler.
+	ds_entry
+        cmp ax,5305h                    ; APM function: CPU idle called?
+        je short @@old                  ; No.
+
+        mov [int_xxh_fcount],0       ; Zero int xxh force counter.
+
+@@old:  ds_jmp old_int_15h      ; Chain to old interrupt handler.
+Endp
+
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 16H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+
+Proc    int_16h_normalhlt
+        push bx                         ; Safety only - BX already saved in the main Int-16 handler
+
+        inc ah                          ; Int 16h FN: Is keystroke ready?
+        mov bh,ah                       ; Save AH (FN number).
+        sti                             ; Enable IRQs for following HLT.
+
+        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
+        jnz short @@apml                ; Yes.
+
+@@stdl: pushf                           ;
+        call [dword old_int_16h]        ; Simulate int 16h without reentrancy.
+        jnz short @@done                ; If ZF == 0 then key is ready.
+
+        hlt                             ; Enter power saving mode.
+
+        mov ah,bh                       ; Restore saved AH (FN number).
+        jmp @@stdl
+
+@@apml: pushf                           ;
+        call [dword old_int_16h]        ; Simulate int 16h without reentrancy.
+        jnz short @@done                ; If ZF == 0 then key is ready.
+
+        mov ax,5305h                    ;
+        pushf                           ;
+        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
+
+        mov ah,bh                       ; Restore saved AH (FN number).
+        jmp @@apml                      ; No, continue HLTing.
+@@done:
+        pop bx
+        ret
+Endp
+
+;----------------------------------------------------------------------------;
+
+Align 4
+
+Proc    int_16h_handler                 ; BIOS keyboard functions handler.
+	ds_entry
+        push ax bx
+
+        cmp ah,INT_16H_TOPFN            ; FN irrelevant for our handler?
+        ja short @@old                  ; Yes, zero force counter and chain.
+
+        xor bh,bh                       ;
+        mov bl,ah                       ;
+        add bx,bx                       ; BX = index to int_16h_fntable.
+        add bx,offset int_16h_fntable   ; BX = offset of handler.
+
+        call [word bx]                  ; Call the appropriate FN handler.
+        jmp short @@oldn                ; Chain without zeroing force count.
+
+@@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+
+@@oldn: pop bx ax
+        ds_jmp old_int_16h      	; Chain to old interrupt handler.
+Endp
+
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 21H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
@@ -520,7 +692,8 @@ Proc    int_21h_fn4bh                   ; DOS FN: Execute child process.
         test al,al                      ; Load and execute child?
         jnz short @@done                ; No, no work for us.
 
-        mov ax,[ss:bp + 2 + 16 + 2]     ; Get DS from stack.
+;        mov ax,[ss:bp + 2 + 16 + 2]     ; Get DS from stack.
+        mov ax,[ss:bp + 4 + 2 + 16 + 2] ; Get DS from stack.    push ax, push bx, call, pusha, push es
         mov es,ax                       ; 
         mov di,dx                       ; ES:DI = caller's DS:DX = child name.
 
@@ -636,9 +809,7 @@ Proc    int_21h_fn4ch                   ; DOS FN: Terminate child process.
         ret
 Endp
 
-
 ;----------------------------------------------------------------------------;
-
 
 Proc    int_21h_normalhlt
         sti                             ; Enable IRQs for following HLT.
@@ -668,10 +839,10 @@ Proc    int_21h_normalhlt
 @@done: ret
 Endp
 
-
 ;----------------------------------------------------------------------------;
 
 Align 4
+
 Proc    int_21h_handler                 ; DOS functions handler.
 	ds_entry
         push ax bx 
@@ -693,79 +864,12 @@ Proc    int_21h_handler                 ; DOS functions handler.
         ds_jmp old_int_21h      ; Chain to old interrupt handler.
 Endp
 
-
-
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 16H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-Proc    int_16h_normalhlt
-        push bx                         ; Safety only - BX already saved in the main Int-16 handler
-
-        inc ah                          ; Int 16h FN: Is keystroke ready?
-        mov bh,ah                       ; Save AH (FN number).
-        sti                             ; Enable IRQs for following HLT.
-
-        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
-        jnz short @@apml                ; Yes.
-
-@@stdl: pushf                           ;
-        call [dword old_int_16h]        ; Simulate int 16h without reentrancy.
-        jnz short @@done                ; If ZF == 0 then key is ready.
-
-        hlt                             ; Enter power saving mode.
-
-        mov ah,bh                       ; Restore saved AH (FN number).
-        jmp @@stdl
-
-@@apml: pushf                           ;
-        call [dword old_int_16h]        ; Simulate int 16h without reentrancy.
-        jnz short @@done                ; If ZF == 0 then key is ready.
-
-        mov ax,5305h                    ;
-        pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
-
-        mov ah,bh                       ; Restore saved AH (FN number).
-        jmp @@apml                      ; No, continue HLTing.
-@@done:
-        pop bx
-        ret
-Endp
-
-
-;----------------------------------------------------------------------------;
-
-Align 4
-
-Proc    int_16h_handler                 ; BIOS keyboard functions handler.
-	ds_entry
-        push ax bx
-
-        cmp ah,INT_16H_TOPFN            ; FN irrelevant for our handler?
-        ja short @@old                  ; Yes, zero force counter and chain.
-
-        xor bh,bh                       ;
-        mov bl,ah                       ;
-        add bx,bx                       ; BX = index to int_16h_fntable.
-        add bx,offset int_16h_fntable   ; BX = offset of handler.
-
-        call [word bx]                  ; Call the appropriate FN handler.
-        jmp short @@oldn                ; Chain without zeroing force count.
-
-@@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
-
-@@oldn: pop bx ax
-        ds_jmp old_int_16h      	; Chain to old interrupt handler.
-Endp
-
-
-
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 2FH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
-
 Align 4
+
 Proc    int_2fh_handler
 	ds_entry
         push ax dx                    ; (AX might be clobbered in int_xxh_forcehlt)
@@ -791,52 +895,9 @@ Proc    int_2fh_handler
         ds_jmp old_int_2fh      	; Chain to old interrupt handler.	
 Endp
 
-;ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ;
-
-
-Align 4
-Proc    int_33h_handler
-        sti                                ; (let 'em run!)
-	ds_entry
-        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
-        
-        cmp ax,000Ch
-        je short @@set_handler
-        cmp ax,0014h
-        je short @@xchg_handler
-        cmp ax,0018h
-        je short @@set_alt_handler
-
-        ds_jmp old_int_33h      	; Chain to old interrupt handler.
-
-@@set_handler:
-        push es dx cx
-        call install_mouse_handler
-        pop  cx dx es
-        ds_iret
-
-@@xchg_handler:
-        call install_mouse_handler
-        ds_iret
-		
-@@set_alt_handler:
-        mov ax,0FFFFh		; Return error
-        ds_iret
-Endp
-
-Proc	mouse_handler
-	ds_entry
-        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
-
-        and ax,[user_mouse_mask]
-        jz short @@done
-
-        ;call debug_char
-
-        ds_jmp user_mouse_handler
-@@done:		
-        ds_retf
-Endp
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
+;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 33H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
+;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 
 ;----------------------------------------------------------------------------;
 ; Installs a new mouse handler and returns the current one
@@ -851,7 +912,6 @@ Endp
 ;     mouse handler in ES:DX and the old event mask in CX.
 
 Proc	install_mouse_handler
-	ds_entry
         push eax               	; (Do NOT save/restore CX, DX, ES - see note above)
 
         ; Save the new mouse handler
@@ -873,6 +933,7 @@ Proc	install_mouse_handler
         ror eax,16
         mov es,ax
 
+        push ds
         push es
         push dx
         push cx
@@ -885,18 +946,59 @@ Proc	install_mouse_handler
         mov cx,7Fh						; Catch all mouse events
         mov ax,000Ch
         pushf
-        call [dword old_int_33h]      ; "INT-Call" to old interrupt handler.
+        call [dword old_int_33h]      				; "INT-Call" to old interrupt handler.
 
         pop cx
         pop dx
         pop es
+	pop ds
 
         pop eax
-        ds_retf
+        ret
+Endp
+
+Align 4
+
+Proc    int_33h_handler
+        sti                             ; (let 'em run!)
+	ds_entry
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+        
+        cmp ax,000Ch
+        je short @@set_handler
+        cmp ax,0014h
+        je short @@xchg_handler
+        cmp ax,0018h
+        je short @@set_alt_handler
+
+        ds_jmp old_int_33h      	; Chain to old interrupt handler.
+
+@@set_handler:
+@@xchg_handler:
+        call install_mouse_handler
+        ds_iret
+		
+@@set_alt_handler:
+        mov ax,0FFFFh			; Return error
+        ds_iret
 Endp
 
 Proc	dummy_mouse_handler
         retf
+Endp
+
+Proc	mouse_handler
+	ds_entry
+        mov [int_xxh_fcount],0          ; Zero int xxh force counter.
+
+        and ax,[user_mouse_mask]
+        jz short @@done
+
+        ;call debug_char
+
+        ds_jmp user_mouse_handler
+@@done:		
+        ds_retf
 Endp
 
 ;----------------------------------------------------------------------------;
@@ -912,98 +1014,6 @@ Endp
         ; pop es
         ; ret
 ; endp
-
-
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 14H HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-
-Proc    int_14h_normalhlt
-	sti                             ; Enable IRQs for following HLT.
-
-        test [tsr_mode_flags],MODE_APM      ; APM usage requested?
-        jnz short @@apml                ; Yes.
-
-@@stdl: hlt                             ; Enter power saving mode.
-        mov ah,03h                      ; Int 14h FN: Get serial port status.
-        pushf                           ;
-        call [dword old_int_14h]        ; Simulate int 14h without reentrancy.
-
-        test ah,1                       ; Is data ready?
-        jz @@stdl                       ; No, continue loop.
-        jmp short @@done                ; Finish.
-
-@@apml: mov ax,5305h                    ;
-        pushf                           ;
-        call [dword old_int_15h]        ; Call APM FN to put the CPU idle.
-
-        mov ah,03h                      ; Int 14h FN: Get serial port status.
-        pushf                           ;
-        call [dword old_int_14h]        ; Simulate int 14h without reentrancy.
-
-        test ah,1                       ; Is data ready?
-        jz @@apml                       ; No, continue loop.
-@@done: ret
-Endp
-
-
-;----------------------------------------------------------------------------;
-
-Align 4
-
-Proc    int_14h_handler                 ; BIOS serial I/O handler.
-	ds_entry
-        push ax bx
-
-        cmp ah,INT_14H_TOPFN            ; FN irrelevant for our handler?
-        ja short @@old                  ; Yes, zero force counter and chain.
-
-        xor bh,bh                       ;
-        mov bl,ah                       ;
-        add bx,bx                       ; BX = index to int_14h_fntable.
-        add bx,offset int_14h_fntable   ; BX = offset of handler.
-
-        call [word bx]                  ; Call the appropriate FN handler.
-        jmp short @@oldn                ; Chain without zeroing force count.
-
-@@old:  mov [int_xxh_fcount],0          ; Zero int xxh force counter.
-
-@@oldn: pop bx ax
-        ds_jmp old_int_14h      	; Chain to old interrupt handler.
-Endp
-
-
-
-
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-;°°°°°°°°°°°°°°°±±±±±±±±±±±±±± INT 1xH HANDLER ±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
-
-
-Align 4
-
-Proc    int_10h_handler                 ; BIOS video functions handler.
-	ds_entry
-        mov [int_xxh_fcount],0       ; Zero int xxh force counter.
-        ds_jmp old_int_10h      ; Chain to old interrupt handler.
-Endp
-
-
-;----------------------------------------------------------------------------;
-
-Align 4
-
-Proc    int_15h_handler                 ; BIOS AT Services handler.
-	ds_entry
-        cmp ax,5305h                    ; APM function: CPU idle called?
-        je short @@old                  ; No.
-
-        mov [int_xxh_fcount],0       ; Zero int xxh force counter.
-
-@@old:  ds_jmp old_int_15h      ; Chain to old interrupt handler.
-Endp
-
-
 
 ;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ;
 ;°°°°°°°°°°°°°°°°±±±±±±±±±±±±±±± IRQ HANDLERS ±±±±±±±±±±±±±±±°°°°°°°°°°°°°°°°;
@@ -1405,6 +1415,7 @@ macro	exit	exit_code
 endm
 
 	ASSUME	DS:DATA_R
+
 PROC	tsr_install
 	;       mov cx,OFFSET RESIDENT_END             ;
 	;	mov di,[mode_flags]		;
@@ -1428,10 +1439,6 @@ PROC	tsr_install
 	mov	[es:int2dh_bios],eax		;set in ivt
 	mov	ax,[tsr_env_seg]
 	call	mem_lrelease
-	mov	si, CODE_R
-	mov	ds, si
-	ASSUME	DS:CODE_R
-	mov	[tsr_ds],fs	
 	pop	ds
 	mov	dx,cx
 	sub 	dx,bx                       ;    ,,
@@ -1454,12 +1461,18 @@ error_exit:                      	; Exits with error message.
 	exit 0                          ; Off we go...
 
 Proc    init
-	mov ax,DATA16                       ;
-	mov ds,ax                       ; Set data segment.
+	mov ax,DATA16                  	
+	mov ds,ax                       ; DS = data segment.
+
 	mov ax,DATA_R
-	mov fs,ax
+	mov fs,ax                       ; FS = DATA_R
+
+	mov ax,CODE_R
+	mov gs,ax
+	mov [gs:tsr_ds],fs	     	; set DATA_R:tsr_ds = DATA_R
+
 	xor ax,ax			;
-	mov gs,ax               	; GS = segment of IVT.
+	mov gs,ax               	; GS = IVT segment 
 
 	mov [psp_seg],es                ; Save PSP segment.
 	mov ax,[es:2ch]                 ;
@@ -1748,22 +1761,22 @@ Proc    hook_ints
         mov ax,offset int_10h_handler   ; EAX = new handler for int 10h.
         call tsr_hookint                ; Hook int 10h.
 
-        mov bl,15h                      ; BL = int number of AT services.
-        mov ax,offset int_15h_handler   ; EAX = new handler for int 15h.
-        call tsr_hookint                ; Hook int 15h.
-
         mov bl,14h                      ; BL = int number of BIOS COM handler.
         mov ax,offset int_14h_handler   ; EAX = new handler for int 14h.
         call tsr_hookint                ; Hook int 14h.
 
+        mov bl,15h                      ; BL = int number of AT services.
+        mov ax,offset int_15h_handler   ; EAX = new handler for int 15h.
+        call tsr_hookint                ; Hook int 15h.
+
         mov bl,16h                      ; BL = int number of keyboard handler.
         mov ax,offset int_16h_handler   ; EAX = new handler for int 16h.
         call tsr_hookint                ; Hook int 16h.
-
+    
         mov bl,21h                      ; BL = int number of DOS FNs handler.
         mov ax,offset int_21h_handler   ; EAX = new handler for int 21h.
-        call tsr_hookint                ; Hook int 21h.
-
+;;;        call tsr_hookint                ; Hook int 21h.
+     
         mov bl,2fh                      ; BL = int # of DOS Multiplex handler.
         mov ax,offset int_2fh_handler   ; EAX = new handler for int 2fh.
         call tsr_hookint                ; Hook int 2fh.
@@ -1784,7 +1797,6 @@ Proc    hook_ints
         mov bl,33h                      ; BL = int # of Mouse handler.
         mov ax,offset int_33h_handler   ; EAX = new handler for int 33h.
         call tsr_hookint                ; Hook int 33h.		
-
         ;-  -  -  -  -  -  -  -  -  -  -;
 @@done:		
         ret
